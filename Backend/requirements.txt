@@ -2,4 +2,5 @@ fastapi
 uvicorn
 requests
 python-dotenv
-flask-cors
+joblib
+scikit-learn
