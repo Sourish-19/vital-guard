@@ -42,6 +42,7 @@ const ChatAssistant: React.FC<ChatAssistantProps> = ({ patient }) => {
 
     try {
       const responseText = await getChatResponse(input, patient);
+      console.log('Chat Response:', responseText);
       const aiMessage: Message = { id: (Date.now() + 1).toString(), role: 'model', text: responseText };
       setMessages(prev => [...prev, aiMessage]);
     } catch (error) {
