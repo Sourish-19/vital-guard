@@ -1,8 +1,5 @@
 fastapi
 uvicorn
-numpy
-pandas
-joblib
-pydantic
-scikit-learn
-uvicorn
+requests
+python-dotenv
+flask-cors
