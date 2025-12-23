@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import {
   Menu,
   Mic,
   AlertTriangle,
   Bell,
   Trash2,
+  Loader2
 } from "lucide-react";
 
 import { generateHealthInsight } from "./services/geminiService";
@@ -30,7 +32,6 @@ import NotificationSystem, {
 } from "./components/NotificationSystem";
 
 import {
-  PageView,
   PatientState,
   AlertLevel,
   AIInsight,
@@ -40,7 +41,7 @@ import {
   NutritionState,
 } from "./types";
 
-// ---------- Helpers ----------
+// ---------- Helpers & Constants ----------
 
 const generateStepHistory = () => {
   const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -54,9 +55,9 @@ const generateStepHistory = () => {
 
 const INITIAL_PATIENT: PatientState = {
   id: "PT-89234",
-  name: "Guest User",
+  full_name: "Guest User",
   age: 65,
-  phoneNumber: "",
+  phone_number: "",
   telegramBotToken: "",
   telegramChatId: "",
   status: AlertLevel.STABLE,
@@ -173,108 +174,88 @@ const INITIAL_PATIENT: PatientState = {
     },
   ],
   logs: [],
-  contacts: [
-    {
-      id: "c1",
-      name: "Dr. Michael Chen",
-      relation: "Cardiologist",
-      phone: "555-0123",
-      isPrimary: true,
-    },
-    {
-      id: "c2",
-      name: "Sarah Thompson",
-      relation: "Daughter",
-      phone: "555-0199",
-      isPrimary: false,
-    },
-  ],
+  contacts: [],
 };
 
 function App() {
-  const [showLanding, setShowLanding] = useState(true);
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // --- States ---
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentPage, setCurrentPage] = useState<PageView>("dashboard");
+  const [isAuthReady, setIsAuthReady] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [patient, setPatient] = useState<PatientState>(INITIAL_PATIENT);
+  const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('smartsos_theme') === 'dark');
   const [showSOSModal, setShowSOSModal] = useState(false);
   const [sosCountdown, setSosCountdown] = useState(5);
   const [aiInsight, setAiInsight] = useState<AIInsight | null>(null);
   const [loadingAi, setLoadingAi] = useState(false);
   const [isTestMode, setIsTestMode] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotificationPanel, setShowNotificationPanel] = useState(false);
 
+  // --- Refs ---
   const patientRef = useRef<PatientState>(patient);
   const audioContextRef = useRef<AudioContext | null>(null);
 
-  // keep ref in sync
-  useEffect(() => {
-    patientRef.current = patient;
-  }, [patient]);
+  useEffect(() => { patientRef.current = patient; }, [patient]);
 
-  // theme
+  // --- Theme Effect ---
   useEffect(() => {
     if (typeof document === "undefined") return;
     if (isDarkMode) {
       document.documentElement.classList.add("dark");
+      localStorage.setItem('smartsos_theme', 'dark');
     } else {
       document.documentElement.classList.remove("dark");
+      localStorage.setItem('smartsos_theme', 'light');
     }
   }, [isDarkMode]);
 
-  // session init
+  // --- Auth Init ---
   useEffect(() => {
-    try {
-      const user = authService.getCurrentUser();
-      if (user) {
-        handleLoginSuccess(user);
-        setShowLanding(false);
-      } else {
-        setShowLanding(true);
+    const initAuth = async () => {
+      try {
+        const user = authService.getCurrentUser();
+        if (user) {
+          handleLoginSuccess(user);
+          if (location.pathname === '/' || location.pathname === '/login') {
+            navigate('/dashboard');
+          }
+        }
+      } catch (e) {
+        console.error("Auth init error", e);
+      } finally {
+        setIsAuthReady(true);
       }
-    } catch (e) {
-      console.error("Auth init error", e);
-      setShowLanding(true);
-    }
+    };
+    initAuth();
   }, []);
 
   const handleLoginSuccess = (user: User) => {
     setPatient((prev) => ({
       ...prev,
-      name: user.name,
-      age: user.age,
-      phoneNumber: user.phoneNumber,
+      id: user.id || prev.id,
+      full_name: user.full_name,
+      age: user.age || prev.age,
+      phone_number: user.phone_number,
       telegramBotToken: user.telegramBotToken || "",
       telegramChatId: user.telegramChatId || "",
       nutrition: user.nutrition || prev.nutrition,
     }));
     setIsAuthenticated(true);
-    setShowLanding(false);
   };
 
   const handleLogout = () => {
     authService.logout();
     setIsAuthenticated(false);
-    setCurrentPage("dashboard");
-    setShowLanding(true);
+    navigate('/');
   };
 
-  const handleLaunchApp = () => setShowLanding(false);
-
-  // notifications
+  // --- Helpers (Notifications, Audio, API) ---
   const addNotification = (type: NotificationType, title: string, message: string) => {
-    const newNotif: Notification = {
-      id: Date.now().toString() + Math.random(),
-      type,
-      title,
-      message,
-      timestamp: new Date().toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-    };
+    const newNotif: Notification = { id: Date.now().toString() + Math.random(), type, title, message, timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) };
     setNotifications((prev) => [newNotif, ...prev]);
   };
 
@@ -282,7 +263,6 @@ function App() {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   };
 
-  // speech helper (guard window)
   const speak = (text: string) => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
@@ -291,123 +271,75 @@ function App() {
     window.speechSynthesis.speak(utterance);
   };
 
-  // audio beep (guard window)
   const playBeep = (frequency = 800, duration = 0.1) => {
     if (typeof window === "undefined") return;
     const AC = (window as any).AudioContext || (window as any).webkitAudioContext;
     if (!AC) return;
-
-    if (!audioContextRef.current) {
-      audioContextRef.current = new AC();
-    }
+    if (!audioContextRef.current) audioContextRef.current = new AC();
     const ctx = audioContextRef.current;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-
     osc.connect(gain);
     gain.connect(ctx.destination);
-
     osc.type = "sine";
     osc.frequency.value = frequency;
     gain.gain.setValueAtTime(0.5, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
-
     osc.start();
     osc.stop(ctx.currentTime + duration);
   };
 
-  // telegram helper
   const notifyCaregiver = async (message: string) => {
     const currentPatient = patientRef.current;
     if (!currentPatient.telegramBotToken || !currentPatient.telegramChatId) return;
-    try {
-      await sendTelegramMessage(
-        currentPatient.telegramBotToken,
-        currentPatient.telegramChatId,
-        message
-      );
-    } catch (e) {
-      console.error("Telegram error", e);
-    }
+    try { await sendTelegramMessage(currentPatient.telegramBotToken, currentPatient.telegramChatId, message); } catch (e) { console.error("Telegram error", e); }
   };
 
-  // reverse geocode
   const getAddressFromCoords = async (lat: number, lng: number) => {
     try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
-      );
+      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
       const data = await response.json();
-      const label =
-        data?.display_name?.split(",")[0] ||
-        `${lat.toFixed(3)}, ${lng.toFixed(3)}`;
+      const label = data?.display_name?.split(",")[0] || `${lat.toFixed(3)}, ${lng.toFixed(3)}`;
       const city = data?.address?.city || data?.address?.town || "";
       return city ? `${label}, ${city}` : label;
-    } catch (e) {
-      console.error("Geocode error", e);
-      return "Location Updated";
-    }
+    } catch (e) { console.error("Geocode error", e); return "Location Updated"; }
   };
 
-  // geolocation (browser only)
+  // --- Effects ---
   useEffect(() => {
     if (!isAuthenticated) return;
     if (typeof navigator === "undefined" || !("geolocation" in navigator)) return;
-
     const watcher = navigator.geolocation.watchPosition(
       async (position) => {
         const { latitude, longitude } = position.coords;
         const address = await getAddressFromCoords(latitude, longitude);
-        setPatient((prev) => ({
-          ...prev,
-          location: { lat: latitude, lng: longitude, address },
-        }));
+        setPatient((prev) => ({ ...prev, location: { lat: latitude, lng: longitude, address } }));
       },
-      (error) => console.log("Geo Error", error),
-      { enableHighAccuracy: true }
+      (error) => console.log("Geo Error", error), { enableHighAccuracy: true }
     );
-
     return () => navigator.geolocation.clearWatch(watcher);
   }, [isAuthenticated]);
 
-  // AI insight
   const fetchInsight = useCallback(async (currentData: PatientState) => {
     try {
       setLoadingAi(true);
       const insight = await generateHealthInsight(currentData);
       setAiInsight(insight);
-    } catch (e) {
-      console.error("AI insight error", e);
-    } finally {
-      setLoadingAi(false);
-    }
+    } catch (e) { console.error("AI insight error", e); } finally { setLoadingAi(false); }
   }, []);
 
-  useEffect(() => {
-    if (isAuthenticated) fetchInsight(patient);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated]);
+  useEffect(() => { if (isAuthenticated) fetchInsight(patient); }, [isAuthenticated]);
 
-  // medication compliance (kept but guarded)
+  // Medication Loop
   useEffect(() => {
     if (!isAuthenticated) return;
-
     const complianceInterval = setInterval(async () => {
       const currentPatient = patientRef.current;
       const now = new Date();
       const currentTotalMinutes = now.getHours() * 60 + now.getMinutes();
-
-      const primaryContact =
-        currentPatient.contacts.find((c) => c.isPrimary) ||
-        currentPatient.contacts[0];
-      const contactInfo = primaryContact
-        ? `${primaryContact.name} (${primaryContact.phone})`
-        : "Emergency Services";
-
-      const getMinutesFromMidnight = (timeStr: string) => {
-        const [h, m] = timeStr.split(":").map(Number);
-        return h * 60 + m;
-      };
+      const primaryContact = currentPatient.contacts.find((c) => c.isPrimary) || currentPatient.contacts[0];
+      const contactInfo = primaryContact ? `${primaryContact.name} (${primaryContact.phone})` : "Emergency Services";
+      const getMinutesFromMidnight = (timeStr: string) => { const [h, m] = timeStr.split(":").map(Number); return h * 60 + m; };
 
       let updatesNeeded = false;
       const newLogs: EmergencyLogType[] = [];
@@ -415,23 +347,10 @@ function App() {
 
       const updatedMeds = currentPatient.medications.map((med) => {
         if (med.taken || med.reminderSent) return med;
-
-        const medTotalMinutes = getMinutesFromMidnight(med.time);
-        if (currentTotalMinutes > medTotalMinutes) {
+        if (currentTotalMinutes > getMinutesFromMidnight(med.time)) {
           updatesNeeded = true;
           medsToNotify.push(med);
-
-          newLogs.push({
-            id: Date.now().toString() + Math.random(),
-            timestamp: now.toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            }),
-            type: "Medication Alert",
-            resolved: false,
-            notes: `Missed Dose: ${med.name}. Alert sent to ${contactInfo}.`,
-          });
-
+          newLogs.push({ id: Date.now().toString() + Math.random(), timestamp: now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), type: "Medication Alert", resolved: false, notes: `Missed Dose: ${med.name}. Alert sent to ${contactInfo}.` });
           return { ...med, reminderSent: true };
         }
         return med;
@@ -439,624 +358,220 @@ function App() {
 
       if (updatesNeeded) {
         medsToNotify.forEach((med) => {
-          const msg = `⚠️ *Medication Reminder*\n\nPatient ${
-            currentPatient.name
-          } missed their dose of *${med.name}* at ${
-            med.time
-          }.\n\nAlerting primary contact: ${contactInfo}`;
+          const msg = `⚠️ *Medication Reminder*\n\nPatient ${currentPatient.full_name} missed their dose of *${med.name}* at ${med.time}.\n\nAlerting primary contact: ${contactInfo}`;
           notifyCaregiver(msg);
-
-          const spokenMsg = `Attention. You missed your ${med.name}. I have notified ${
-            primaryContact ? primaryContact.name : "your caregiver"
-          }.`;
-          speak(spokenMsg);
-
-          addNotification(
-            "whatsapp",
-            "Medication Missed",
-            `Alert sent to ${contactInfo}. Please take ${med.name}.`
-          );
+          speak(`Attention. You missed your ${med.name}. I have notified ${primaryContact ? primaryContact.name : "your caregiver"}.`);
+          addNotification("whatsapp", "Medication Missed", `Alert sent to ${contactInfo}. Please take ${med.name}.`);
         });
-
-        setPatient((prev) => ({
-          ...prev,
-          medications: updatedMeds,
-          logs: [...newLogs, ...prev.logs],
-        }));
+        setPatient((prev) => ({ ...prev, medications: updatedMeds, logs: [...newLogs, ...prev.logs] }));
       }
     }, 10000);
-
     return () => clearInterval(complianceInterval);
   }, [isAuthenticated]);
 
-  // vitals simulation (unchanged logic, guarded)
+  // Vitals Simulation Loop
   useEffect(() => {
     if (!isAuthenticated) return;
+    if (location.pathname === '/settings') return; // STOP SIMULATION ON SETTINGS
 
     const interval = setInterval(() => {
       setPatient((prev) => {
         const isCritical = prev.status === AlertLevel.CRITICAL;
-
-        const newHr = isCritical
-          ? 130 + Math.random() * 40
-          : 72 + (Math.random() * 4 - 2);
-        const newSys = isCritical
-          ? 160 + Math.random() * 20
-          : 118 + (Math.random() * 6 - 3);
+        const newHr = isCritical ? 130 + Math.random() * 40 : 72 + (Math.random() * 4 - 2);
+        const newSys = isCritical ? 160 + Math.random() * 20 : 118 + (Math.random() * 6 - 3);
         const newTemp = 98.6 + (Math.random() * 0.8 - 0.4);
-
-        const stepInc =
-          Math.random() > 0.6 ? Math.floor(Math.random() * 8) + 2 : 0;
-
+        const stepInc = Math.random() > 0.6 ? Math.floor(Math.random() * 8) + 2 : 0;
         let newPoints = prev.stepPoints;
-        if (
-          prev.steps.value + stepInc >= prev.dailyStepGoal &&
-          prev.steps.value < prev.dailyStepGoal
-        ) {
+        if (prev.steps.value + stepInc >= prev.dailyStepGoal && prev.steps.value < prev.dailyStepGoal) {
           newPoints += 50;
-          addNotification(
-            "system",
-            "Daily Goal Reached!",
-            `You've hit ${prev.dailyStepGoal} steps. +50 pts!`
-          );
+          addNotification("system", "Daily Goal Reached!", `You've hit ${prev.dailyStepGoal} steps. +50 pts!`);
         }
-
-        const timestamp = new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-        });
-
-        const newHrHistory = [
-          ...prev.heartRate.history.slice(1),
-          { time: timestamp, value: newHr },
-        ];
-        const newBpHistory = [
-          ...prev.bloodPressure.history.slice(1),
-          {
-            time: timestamp,
-            systolic: newSys,
-            diastolic: prev.bloodPressure.diastolic,
-          },
-        ];
-        const newTempHistory = [
-          ...prev.temperature.history.slice(1),
-          { time: timestamp, value: newTemp },
-        ];
-
+        const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
         return {
           ...prev,
-          heartRate: {
-            ...prev.heartRate,
-            value: Math.floor(newHr),
-            history: newHrHistory,
-          },
-          bloodPressure: {
-            ...prev.bloodPressure,
-            systolic: Math.floor(newSys),
-            history: newBpHistory,
-          },
-          temperature: {
-            ...prev.temperature,
-            value: newTemp,
-            history: newTempHistory,
-          },
+          heartRate: { ...prev.heartRate, value: Math.floor(newHr), history: [...prev.heartRate.history.slice(1), { time: timestamp, value: newHr }] },
+          bloodPressure: { ...prev.bloodPressure, systolic: Math.floor(newSys), history: [...prev.bloodPressure.history.slice(1), { time: timestamp, systolic: newSys, diastolic: prev.bloodPressure.diastolic }] },
+          temperature: { ...prev.temperature, value: newTemp, history: [...prev.temperature.history.slice(1), { time: timestamp, value: newTemp }] },
           steps: { ...prev.steps, value: prev.steps.value + stepInc },
           stepPoints: newPoints,
         };
       });
     }, 2000);
-
     return () => clearInterval(interval);
-  }, [isAuthenticated]);
+  }, [isAuthenticated, location.pathname]);
 
-  const handleUpdateStepGoal = (newGoal: number) => {
-    setPatient((prev) => ({
-      ...prev,
-      dailyStepGoal: newGoal,
-    }));
-    addNotification(
-      "system",
-      "Goal Updated",
-      `Daily step target set to ${newGoal.toLocaleString()}`
-    );
-  };
-
-  // SOS / emergency helpers (logic unchanged, just guarded by speak/notifyCaregiver)
-
+  // --- Event Handlers ---
+  const handleUpdateStepGoal = (newGoal: number) => { setPatient((prev) => ({ ...prev, dailyStepGoal: newGoal })); addNotification("system", "Goal Updated", `Daily step target set to ${newGoal.toLocaleString()}`); };
   const handleManualSOS = (type: "cardiac" | "fall" = "cardiac") => {
     setIsTestMode(false);
-    const timestamp = new Date().toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
-    let notes = "Heart rate > 140 BPM detected via manual simulation.";
-    let alertMsg = "CRITICAL (Heart Rate Spike)";
-
-    if (type === "fall") {
-      notes = "Sudden impact detected. User unresponsive.";
-      alertMsg = "CRITICAL (Fall Detected)";
-    }
-
-    const newLog: EmergencyLogType = {
-      id: Date.now().toString(),
-      timestamp,
-      type: type === "fall" ? "Fall Detection" : "Critical Vitals Spike",
-      resolved: false,
-      notes,
-    };
-
-    setPatient((prev) => ({
-      ...prev,
-      status: AlertLevel.CRITICAL,
-      logs: [newLog, ...prev.logs],
-    }));
-
+    const newLog: EmergencyLogType = { id: Date.now().toString(), timestamp: new Date().toLocaleTimeString(), type: type === "fall" ? "Fall Detection" : "Critical Vitals Spike", resolved: false, notes: type === "fall" ? "Sudden impact detected." : "Heart rate spike > 140 BPM." };
+    setPatient((prev) => ({ ...prev, status: AlertLevel.CRITICAL, logs: [newLog, ...prev.logs] }));
     setShowSOSModal(true);
     setSosCountdown(10);
-
-    if (type === "fall") {
-      speak("Fall detected. Calling emergency contacts in 10 seconds.");
-      addNotification(
-        "system",
-        "FALL DETECTED",
-        "Hard impact detected. Alerting contacts."
-      );
-    } else {
-      speak(
-        "Warning. Heart rate anomaly detected. Emergency protocols initiated."
-      );
-      addNotification(
-        "system",
-        "CRITICAL ALERT",
-        "Abnormal heart rate detected. Emergency contacts are being notified."
-      );
-    }
-
-    notifyCaregiver(
-      `🚨 *SOS EMERGENCY ALERT* 🚨\n\nPatient: ${
-        patientRef.current.name
-      }\nStatus: ${alertMsg}\nLocation: ${
-        patientRef.current.location.address
-      }\n\nPlease respond immediately.`
-    );
-
-    setTimeout(
-      () =>
-        fetchInsight({ ...patientRef.current, status: AlertLevel.CRITICAL }),
-      1000
-    );
+    speak(type === "fall" ? "Fall detected. Calling emergency contacts." : "Warning. Heart rate anomaly detected.");
+    notifyCaregiver(`🚨 *SOS EMERGENCY ALERT* 🚨\n\nPatient: ${patientRef.current.full_name}\nStatus: CRITICAL\nLocation: ${patientRef.current.location.address}`);
+    setTimeout(() => fetchInsight({ ...patientRef.current, status: AlertLevel.CRITICAL }), 1000);
   };
-
   const triggerChaos = () => handleManualSOS("cardiac");
   const triggerFall = () => handleManualSOS("fall");
-
   const handleSystemTest = () => {
     setIsTestMode(true);
-    const timestamp = new Date().toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-
-    const newLog: EmergencyLogType = {
-      id: Date.now().toString(),
-      timestamp,
-      type: "System Test",
-      resolved: true,
-      notes: "User initiated alarm system diagnostic check.",
-    };
-
-    setPatient((prev) => ({
-      ...prev,
-      logs: [newLog, ...prev.logs],
-    }));
-
+    setPatient((prev) => ({ ...prev, logs: [{ id: Date.now().toString(), timestamp: new Date().toLocaleTimeString(), type: "System Test", resolved: true, notes: "User initiated diagnostic." }, ...prev.logs] }));
     setShowSOSModal(true);
     setSosCountdown(5);
-    speak("System test initiated. Alarm speakers functional.");
+    speak("System test initiated.");
   };
-
   const handleNotificationTest = async () => {
-    addNotification(
-      "whatsapp",
-      "Telegram Bot",
-      "Sending test message to your connected device..."
-    );
-    const success = await sendTelegramMessage(
-      patient.telegramBotToken || "",
-      patient.telegramChatId || "",
-      "🏥 *SmartSOS Test Message*\n\nYour notification system is working correctly."
-    );
-
-    if (success) {
-      speak("Test message sent successfully.");
-      addNotification(
-        "whatsapp",
-        "Telegram Bot",
-        "Success! Check your Telegram app."
-      );
-    } else {
-      speak("Could not send message. Please check your bot token.");
-      addNotification(
-        "system",
-        "Connection Failed",
-        "Could not send real Telegram message. Please check your Bot Token and Chat ID in settings."
-      );
-    }
+    addNotification("whatsapp", "Telegram Bot", "Sending test message...");
+    const success = await sendTelegramMessage(patient.telegramBotToken || "", patient.telegramChatId || "", "🏥 *SmartSOS Test Message*\n\nYour notification system is working correctly.");
+    if (success) { speak("Test message sent."); addNotification("whatsapp", "Telegram Bot", "Success! Check your Telegram app."); } else { speak("Could not send message."); addNotification("system", "Connection Failed", "Check your Bot Token/Chat ID."); }
   };
-
   const resolveEmergency = () => {
-    setPatient((prev) => ({
-      ...prev,
-      status: AlertLevel.STABLE,
-      logs: prev.logs.map((log) =>
-        !log.resolved
-          ? { ...log, resolved: true, notes: `${log.notes} [User Acknowledged]` }
-          : log
-      ),
-    }));
-
+    setPatient((prev) => ({ ...prev, status: AlertLevel.STABLE, logs: prev.logs.map((log) => !log.resolved ? { ...log, resolved: true, notes: `${log.notes} [User Acknowledged]` } : log) }));
     setShowSOSModal(false);
-    speak("Alarm cancelled. Systems returning to normal.");
-    if (!isTestMode) {
-      notifyCaregiver(
-        `✅ *Alert Resolved*\n\nPatient ${
-          patientRef.current.name
-        } has cancelled the SOS alarm and marked themselves as safe.`
-      );
-      fetchInsight({ ...patientRef.current, status: AlertLevel.STABLE });
-    }
+    speak("Alarm cancelled.");
+    if (!isTestMode) { notifyCaregiver(`✅ *Alert Resolved*\n\nPatient ${patientRef.current.full_name} has marked themselves as safe.`); fetchInsight({ ...patientRef.current, status: AlertLevel.STABLE }); }
     setIsTestMode(false);
   };
-
-  const handleToggleMedication = (id: string) => {
-    setPatient((prev) => ({
-      ...prev,
-      medications: prev.medications.map((med) =>
-        med.id === id ? { ...med, taken: !med.taken } : med
-      ),
-    }));
-  };
-
-  const handleAddMedication = (newMed: Omit<Medication, "id" | "taken">) => {
-    const medToAdd: Medication = {
-      ...newMed,
-      id: Date.now().toString(),
-      taken: false,
-      reminderSent: false,
-    };
-    setPatient((prev) => ({
-      ...prev,
-      medications: [...prev.medications, medToAdd],
-    }));
-  };
-
+  const handleToggleMedication = (id: string) => { setPatient((prev) => ({ ...prev, medications: prev.medications.map((med) => med.id === id ? { ...med, taken: !med.taken } : med) })); };
+  const handleAddMedication = (newMed: Omit<Medication, "id" | "taken">) => { setPatient((prev) => ({ ...prev, medications: [...prev.medications, { ...newMed, id: Date.now().toString(), taken: false, reminderSent: false }] })); };
   const handleUpdateProfile = async (updates: Partial<PatientState>) => {
     setPatient((prev) => ({ ...prev, ...updates }));
-
     const user = authService.getCurrentUser();
     if (!user) return;
-
     const userUpdates: Partial<User> = {};
-    if (updates.name) userUpdates.name = updates.name;
+    if (updates.full_name) userUpdates.full_name = updates.full_name;
     if (updates.age) userUpdates.age = updates.age;
-    if (updates.phoneNumber) userUpdates.phoneNumber = updates.phoneNumber;
-    if (updates.telegramBotToken !== undefined)
-      userUpdates.telegramBotToken = updates.telegramBotToken;
-    if (updates.telegramChatId !== undefined)
-      userUpdates.telegramChatId = updates.telegramChatId;
-
-    if (Object.keys(userUpdates).length > 0) {
-      await authService.updateUser(user.id, userUpdates);
-    }
+    if (updates.phone_number) userUpdates.phone_number = updates.phone_number;
+    if (updates.telegramBotToken !== undefined) userUpdates.telegramBotToken = updates.telegramBotToken;
+    if (updates.telegramChatId !== undefined) userUpdates.telegramChatId = updates.telegramChatId;
+    if (Object.keys(userUpdates).length > 0) await authService.updateUser(user.id, userUpdates);
   };
+  const handleAddContact = (contact: Omit<EmergencyContact, "id">) => { setPatient((prev) => ({ ...prev, contacts: [...prev.contacts, { ...contact, id: Date.now().toString() }] })); };
+  const handleRemoveContact = (id: string) => { setPatient((prev) => ({ ...prev, contacts: prev.contacts.filter((c) => c.id !== id) })); };
+  const handleUpdateNutrition = async (newNutrition: NutritionState) => { setPatient((prev) => ({ ...prev, nutrition: newNutrition })); const user = authService.getCurrentUser(); if (user) await authService.updateUser(user.id, { nutrition: newNutrition }); };
 
-  const handleAddContact = (contact: Omit<EmergencyContact, "id">) => {
-    const newContact: EmergencyContact = {
-      ...contact,
-      id: Date.now().toString(),
-    };
-    setPatient((prev) => ({
-      ...prev,
-      contacts: [...prev.contacts, newContact],
-    }));
-  };
-
-  const handleRemoveContact = (id: string) => {
-    setPatient((prev) => ({
-      ...prev,
-      contacts: prev.contacts.filter((c) => c.id !== id),
-    }));
-  };
-
-  const handleUpdateNutrition = async (newNutrition: NutritionState) => {
-    setPatient((prev) => ({
-      ...prev,
-      nutrition: newNutrition,
-    }));
-
-    const user = authService.getCurrentUser();
-    if (user) {
-      await authService.updateUser(user.id, { nutrition: newNutrition });
-    }
-  };
-
-  // SOS countdown
   useEffect(() => {
     if (!showSOSModal) return;
     if (sosCountdown <= 0) return;
-
     const pitch = 800 + (10 - sosCountdown) * 100;
     playBeep(pitch, 0.15);
-
-    const timer = setTimeout(
-      () => setSosCountdown((c) => c - 1),
-      1000
-    );
+    const timer = setTimeout(() => setSosCountdown((c) => c - 1), 1000);
     return () => clearTimeout(timer);
   }, [showSOSModal, sosCountdown]);
 
-  // ---------- Render flow ----------
+  // Determine if we are on a public page (no sidebar/header)
+  const isPublicPage = location.pathname === '/' || location.pathname === '/login';
 
-  if (showLanding) {
+  if (!isAuthReady) {
     return (
-      <LandingPage
-        onLaunch={handleLaunchApp}
-        isDarkMode={isDarkMode}
-        onToggleTheme={() => setIsDarkMode(!isDarkMode)}
-      />
+      <div className="flex h-screen w-full items-center justify-center bg-slate-50 dark:bg-slate-950">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Loading SmartSOS...</p>
+        </div>
+      </div>
     );
   }
 
-  if (!isAuthenticated) {
-    return <Auth onLogin={handleLoginSuccess} />;
-  }
-
+  // --- Main Render ---
   return (
     <div className="flex h-screen bg-slate-50 dark:bg-slate-950 overflow-hidden font-sans transition-colors duration-200">
-      <NotificationSystem
-        notifications={notifications}
-        onClose={removeNotification}
-      />
-
+      
+      {/* Global Components */}
+      <NotificationSystem notifications={notifications} onClose={removeNotification} />
+      
       {showSOSModal && (
         <div className="fixed inset-0 bg-red-600 bg-opacity-90 z-50 flex items-center justify-center animate-in fade-in zoom-in duration-300 backdrop-blur-sm">
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-10 max-w-lg w-full mx-4 text-center shadow-2xl border-4 border-red-500">
             <div className="flex justify-center mb-6">
               <div className="bg-red-100 dark:bg-red-900/50 p-6 rounded-full animate-ping">
-                <AlertTriangle
-                  size={64}
-                  className="text-red-600 dark:text-red-500"
-                />
+                <AlertTriangle size={64} className="text-red-600 dark:text-red-500" />
               </div>
             </div>
-
-            <h2 className="text-4xl font-black text-slate-900 dark:text-white mb-2">
-              EMERGENCY ALERT
-            </h2>
-            <p className="text-xl text-slate-600 dark:text-slate-300 font-medium mb-8">
-              {isTestMode
-                ? "System Test Initiated"
-                : "Calling Emergency Contacts in..."}
-            </p>
-
-            <div className="text-8xl font-black text-red-600 dark:text-red-500 mb-8 font-mono tracking-tighter">
-              00:0{sosCountdown}
-            </div>
-
+            <h2 className="text-4xl font-black text-slate-900 dark:text-white mb-2">EMERGENCY ALERT</h2>
+            <p className="text-xl text-slate-600 dark:text-slate-300 font-medium mb-8">{isTestMode ? "System Test Initiated" : "Calling Emergency Contacts in..."}</p>
+            <div className="text-8xl font-black text-red-600 dark:text-red-500 mb-8 font-mono tracking-tighter">00:0{sosCountdown}</div>
             <div className="space-y-4">
-              <button
-                onClick={resolveEmergency}
-                className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 py-4 rounded-xl font-bold text-xl hover:bg-slate-800 dark:hover:bg-slate-200 transition-colors shadow-lg"
-              >
-                {isTestMode ? "End System Test" : "I AM SAFE - CANCEL ALARM"}
-              </button>
-              {!isTestMode && (
-                <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">
-                  Do not close this window. GPS location is being broadcast.
-                </p>
-              )}
+              <button onClick={resolveEmergency} className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 py-4 rounded-xl font-bold text-xl hover:bg-slate-800 dark:hover:bg-slate-200 transition-colors shadow-lg">{isTestMode ? "End System Test" : "I AM SAFE - CANCEL ALARM"}</button>
+              {!isTestMode && <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">Do not close this window. GPS location is being broadcast.</p>}
             </div>
           </div>
         </div>
       )}
 
-      {isSidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-20 md:hidden"
-          onClick={() => setIsSidebarOpen(false)}
-        />
+      {/* Sidebar & Header (Only for authenticated pages) */}
+      {!isPublicPage && isAuthenticated && (
+        <>
+          {isSidebarOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-20 md:hidden" onClick={() => setIsSidebarOpen(false)} />}
+          <div className={`fixed inset-y-0 left-0 transform ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} md:relative md:translate-x-0 transition duration-200 ease-in-out z-30`}>
+            <Sidebar fullName={patient.full_name} onLogout={handleLogout} isDarkMode={isDarkMode} onToggleTheme={() => setIsDarkMode(!isDarkMode)} />
+          </div>
+        </>
       )}
 
-      <div
-        className={`fixed inset-y-0 left-0 transform ${
-          isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-        } md:relative md:translate-x-0 transition duration-200 ease-in-out z-30`}
-      >
-        <Sidebar
-          currentPage={currentPage}
-          onNavigate={(page) => {
-            setCurrentPage(page);
-            setIsSidebarOpen(false);
-          }}
-          userName={patient.name}
-          onLogout={handleLogout}
-          isDarkMode={isDarkMode}
-          onToggleTheme={() => setIsDarkMode(!isDarkMode)}
-        />
-      </div>
-
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-        <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 h-16 flex items-center justify-between px-4 sm:px-6 z-10 transition-colors duration-200">
-          <button
-            onClick={() => setIsSidebarOpen(true)}
-            className="md:hidden p-2 text-slate-500 dark:text-slate-400"
-          >
-            <Menu />
-          </button>
-
-          <div className="flex items-center space-x-2 md:space-x-4 ml-auto">
-            <div className="relative">
-              <button
-                onClick={() =>
-                  setShowNotificationPanel((prev) => !prev)
-                }
-                className="p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors relative"
-                title="Notifications"
-              >
-                <Bell size={20} />
-                {notifications.length > 0 && (
-                  <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white dark:border-slate-900" />
-                )}
-              </button>
-
-              {showNotificationPanel && (
-                <div className="absolute top-12 right-0 w-80 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 origin-top-right">
-                  <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
-                    <h3 className="font-bold text-slate-900 dark:text-white text-sm">
-                      Notifications
-                    </h3>
-                    {notifications.length > 0 && (
-                      <button
-                        onClick={() => setNotifications([])}
-                        className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
-                      >
-                        <Trash2 size={12} /> Clear All
-                      </button>
-                    )}
-                  </div>
-                  <div className="max-h-80 overflow-y-auto">
-                    {notifications.length === 0 ? (
-                      <div className="p-8 text-center">
-                        <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-full inline-block mb-2">
-                          <Bell className="text-slate-400" size={20} />
-                        </div>
-                        <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">
-                          No new notifications
-                        </p>
-                      </div>
-                    ) : (
-                      notifications.map((n) => (
-                        <div
-                          key={n.id}
-                          className="p-4 border-b border-slate-100 dark:border-slate-800 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
-                        >
+        {/* Header (Only for authenticated pages) */}
+        {!isPublicPage && isAuthenticated && (
+          <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 h-16 flex items-center justify-between px-4 sm:px-6 z-10 transition-colors duration-200">
+            <button onClick={() => setIsSidebarOpen(true)} className="md:hidden p-2 text-slate-500 dark:text-slate-400"><Menu /></button>
+            <div className="flex items-center space-x-2 md:space-x-4 ml-auto">
+              <div className="relative">
+                <button onClick={() => setShowNotificationPanel((prev) => !prev)} className="p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors relative" title="Notifications">
+                  <Bell size={20} />
+                  {notifications.length > 0 && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white dark:border-slate-900" />}
+                </button>
+                {showNotificationPanel && (
+                  <div className="absolute top-12 right-0 w-80 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 origin-top-right">
+                    <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
+                      <h3 className="font-bold text-slate-900 dark:text-white text-sm">Notifications</h3>
+                      {notifications.length > 0 && <button onClick={() => setNotifications([])} className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"><Trash2 size={12} /> Clear All</button>}
+                    </div>
+                    <div className="max-h-80 overflow-y-auto">
+                      {notifications.length === 0 ? <div className="p-8 text-center"><p className="text-slate-500 dark:text-slate-400 text-sm font-medium">No new notifications</p></div> : notifications.map((n) => (
+                        <div key={n.id} className="p-4 border-b border-slate-100 dark:border-slate-800 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                           <div className="flex justify-between items-start mb-1">
-                            <span
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
-                                n.type === "whatsapp"
-                                  ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
-                                  : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300"
-                              }`}
-                            >
-                              {n.type === "whatsapp"
-                                ? "Message"
-                                : "System Alert"}
-                            </span>
-                            <span className="text-[10px] text-slate-400">
-                              {n.timestamp}
-                            </span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${n.type === "whatsapp" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300" : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300"}`}>{n.type === "whatsapp" ? "Message" : "System Alert"}</span>
+                            <span className="text-[10px] text-slate-400">{n.timestamp}</span>
                           </div>
-                          <h4 className="font-bold text-sm text-slate-800 dark:text-white mt-1">
-                            {n.title}
-                          </h4>
-                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                            {n.message}
-                          </p>
+                          <h4 className="font-bold text-sm text-slate-800 dark:text-white mt-1">{n.title}</h4>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">{n.message}</p>
                         </div>
-                      ))
-                    )}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
+              <button onClick={() => speak(`Hello ${patient.full_name}. Your heart rate is ${patient.heartRate.value}.`)} className="flex items-center space-x-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"><Mic size={18} /><span className="text-sm font-bold hidden sm:inline">Voice Assistant</span></button>
+              <button onClick={() => handleManualSOS("cardiac")} className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-full hover:bg-red-700 animate-pulse font-bold active:scale-95"><AlertTriangle size={18} /><span className="hidden sm:inline">SOS</span></button>
             </div>
-
-            <button
-              onClick={() =>
-                speak(
-                  `Hello ${patient.name}. Your vitals are being monitored. Heart rate is ${patient.heartRate.value} beats per minute.`
-                )
-              }
-              className="flex items-center space-x-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
-            >
-              <Mic size={18} />
-              <span className="text-sm font-bold hidden sm:inline">
-                Voice Assistant
-              </span>
-            </button>
-
-            <button
-              onClick={() => handleManualSOS("cardiac")}
-              className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-full hover:bg-red-700 shadow-lg shadow-red-200 dark:shadow-none transition-all animate-pulse font-bold active:scale-95"
-            >
-              <AlertTriangle size={18} />
-              <span className="hidden sm:inline">SOS EMERGENCY</span>
-              <span className="sm:hidden">SOS</span>
-            </button>
-          </div>
-        </header>
+          </header>
+        )}
 
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 scroll-smooth">
           <div className="max-w-7xl mx-auto">
-            {currentPage === "dashboard" && (
-              <Dashboard
-                patient={patient}
-                onSpeak={speak}
-                onSimulateChaos={triggerChaos}
-                onSimulateFall={triggerFall}
-                aiInsight={aiInsight}
-                loadingAi={loadingAi}
-                onNavigate={setCurrentPage}
-              />
-            )}
-            {currentPage === "trends" && (
-              <VitalsTrends patient={patient} isDarkMode={isDarkMode} />
-            )}
-            {currentPage === "medications" && (
-              <Medications
-                medications={patient.medications}
-                onToggleTaken={handleToggleMedication}
-                onAddMedication={handleAddMedication}
-              />
-            )}
-            {currentPage === "logs" && (
-              <EmergencyLog logs={patient.logs} />
-            )}
-            {currentPage === "health-tips" && (
-              <HealthTips onNotification={addNotification} />
-            )}
-            {currentPage === "nutrition" && (
-              <NutritionTracker
-                patient={patient}
-                onUpdateNutrition={handleUpdateNutrition}
-              />
-            )}
-            {currentPage === "steps" && (
-              <StepsTracker
-                patient={patient}
-                onUpdateGoal={handleUpdateStepGoal}
-              />
-            )}
-            {currentPage === "sleep" && (
-              <SleepTracker patient={patient} />
-            )}
-            {currentPage === "settings" && (
-              <Settings
-                patient={patient}
-                onUpdateProfile={handleUpdateProfile}
-                onAddContact={handleAddContact}
-                onRemoveContact={handleRemoveContact}
-                onTestAlarm={handleSystemTest}
-                onTestWhatsApp={handleNotificationTest}
-              />
-            )}
+            <Routes>
+              <Route path="/" element={<LandingPage onLaunch={() => navigate('/login')} isDarkMode={isDarkMode} onToggleTheme={() => setIsDarkMode(!isDarkMode)} />} />
+              <Route path="/login" element={<Auth onLogin={(user) => { handleLoginSuccess(user); navigate('/dashboard'); }} />} />
+              
+              {/* Protected Routes directly rendered */}
+              <Route path="/dashboard" element={isAuthenticated ? <Dashboard patient={patient} onSpeak={speak} onSimulateChaos={triggerChaos} onSimulateFall={triggerFall} aiInsight={aiInsight} loadingAi={loadingAi} onNavigate={(path: any) => navigate(`/${path}`)} /> : <Navigate to="/login" />} />
+              <Route path="/trends" element={isAuthenticated ? <VitalsTrends patient={patient} isDarkMode={isDarkMode} /> : <Navigate to="/login" />} />
+              <Route path="/medications" element={isAuthenticated ? <Medications medications={patient.medications} onToggleTaken={handleToggleMedication} onAddMedication={handleAddMedication} /> : <Navigate to="/login" />} />
+              <Route path="/logs" element={isAuthenticated ? <EmergencyLog logs={patient.logs} /> : <Navigate to="/login" />} />
+              <Route path="/health-tips" element={isAuthenticated ? <HealthTips onNotification={addNotification} /> : <Navigate to="/login" />} />
+              <Route path="/nutrition" element={isAuthenticated ? <NutritionTracker patient={patient} onUpdateNutrition={handleUpdateNutrition} /> : <Navigate to="/login" />} />
+              <Route path="/steps" element={isAuthenticated ? <StepsTracker patient={patient} onUpdateGoal={handleUpdateStepGoal} /> : <Navigate to="/login" />} />
+              <Route path="/sleep" element={isAuthenticated ? <SleepTracker patient={patient} /> : <Navigate to="/login" />} />
+              <Route path="/settings" element={isAuthenticated ? <Settings patient={patient} onUpdateProfile={handleUpdateProfile} onAddContact={handleAddContact} onRemoveContact={handleRemoveContact} onTestAlarm={handleSystemTest} onTestWhatsApp={handleNotificationTest} /> : <Navigate to="/login" />} />
+              
+              <Route path="*" element={<Navigate to="/" />} />
+            </Routes>
           </div>
         </main>
 
-        {currentPage !== "settings" && (
-          <ChatAssistant patient={patient} />
-        )}
+        {/* Chat Assistant (Persistent & Auth only) */}
+        {!isPublicPage && isAuthenticated && location.pathname !== '/settings' && <ChatAssistant patient={patient} />}
       </div>
     </div>
   );

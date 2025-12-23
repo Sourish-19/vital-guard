@@ -1,6 +1,5 @@
-
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageCircle, X, Send, Bot, User } from 'lucide-react';
+import { MessageCircle, X, Send, Bot } from 'lucide-react';
 import { PatientState } from '../types';
 import { getChatResponse } from '../services/geminiService';
 
@@ -17,9 +16,16 @@ interface Message {
 const ChatAssistant: React.FC<ChatAssistantProps> = ({ patient }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
+  
+  // Initial greeting using patient name
   const [messages, setMessages] = useState<Message[]>([
-    { id: '1', role: 'model', text: `Hello! I'm your health assistant. I can see your current vitals. How are you feeling today?` }
+    { 
+      id: '1', 
+      role: 'model', 
+      text: `Hello ${patient.full_name || 'there'}! I'm your health assistant. I can see your current heart rate is ${patient.heartRate.value} bpm. How are you feeling?` 
+    }
   ]);
+  
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -31,27 +37,72 @@ const ChatAssistant: React.FC<ChatAssistantProps> = ({ patient }) => {
     scrollToBottom();
   }, [messages, isOpen]);
 
+  // --- LOCAL FALLBACK LOGIC (Runs when API Quota Exceeds) ---
+  const getFallbackResponse = (query: string, patientData: PatientState) => {
+    const q = query.toLowerCase();
+    
+    if (q.includes('heart') || q.includes('rate') || q.includes('pulse')) {
+      return `Your heart rate is currently ${patientData.heartRate.value} BPM. This is considered ${patientData.status === 'STABLE' ? 'normal' : 'high'} for your age.`;
+    }
+    if (q.includes('pressure') || q.includes('bp')) {
+      return `Your latest blood pressure reading is ${patientData.bloodPressure.systolic}/${patientData.bloodPressure.diastolic}.`;
+    }
+    if (q.includes('diet') || q.includes('food') || q.includes('eat')) {
+      return "Based on your vitals, I recommend sticking to a low-sodium diet rich in leafy greens and lean proteins. Make sure to stay hydrated!";
+    }
+    if (q.includes('emergency') || q.includes('help') || q.includes('sos')) {
+      return "If you are feeling unwell, please press the red SOS button at the top of the screen immediately to notify your emergency contacts.";
+    }
+    if (q.includes('hello') || q.includes('hi')) {
+      return `Hello ${patientData.full_name}! I'm here to help you monitor your health.`;
+    }
+    
+    // Default fallback
+    return "I've noted that. I'm currently running in offline mode due to connection limits, but your vitals look stable. Is there anything specific about your readings you'd like to know?";
+  };
+
   const handleSend = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!input.trim() || isLoading) return;
 
-    const userMessage: Message = { id: Date.now().toString(), role: 'user', text: input };
+    const userText = input;
+    const userMessage: Message = { id: Date.now().toString(), role: 'user', text: userText };
+    
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
 
     try {
-      const responseText = await getChatResponse(input, patient);
-      console.log('Chat Response:', responseText);
-      const aiMessage: Message = { id: (Date.now() + 1).toString(), role: 'model', text: responseText };
+      // 1. Try to fetch from Real AI
+      const responseText = await getChatResponse(userText, patient);
+      
+      const aiMessage: Message = { 
+        id: (Date.now() + 1).toString(), 
+        role: 'model', 
+        text: responseText 
+      };
       setMessages(prev => [...prev, aiMessage]);
-    } catch (error) {
-      console.error('Chat Error:', error);
-      const errorMessage: Message = { id: (Date.now() + 1).toString(), role: 'model', text: "I'm having trouble connecting right now. Please try again." };
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
+
+    } catch (error: any) {
+      console.warn('AI API Error (Falling back to local mode):', error);
+      
+      // 2. CATCH QUOTA ERRORS: Use Fallback instead of showing an error message
+      setTimeout(() => {
+        const fallbackText = getFallbackResponse(userText, patient);
+        
+        const fallbackMessage: Message = { 
+          id: (Date.now() + 1).toString(), 
+          role: 'model', 
+          text: fallbackText 
+        };
+        setMessages(prev => [...prev, fallbackMessage]);
+        setIsLoading(false); 
+      }, 1000); // Small fake delay to feel natural
+      
+      return; 
     }
+
+    setIsLoading(false);
   };
 
   return (

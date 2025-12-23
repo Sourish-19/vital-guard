@@ -1,23 +1,26 @@
-
 import React from 'react';
-import { LayoutDashboard, Activity, Pill, AlertTriangle, Settings, User, LogOut, Sun, Moon, Sparkles, Utensils, Footprints, BedDouble } from 'lucide-react';
-import { PageView } from '../types';
+import { useLocation, useNavigate } from 'react-router-dom'; // Import Hooks
+import { LayoutDashboard, Activity, Pill, AlertTriangle, Settings, LogOut, Sun, Moon, Sparkles, Utensils, Footprints, BedDouble } from 'lucide-react';
 
 interface SidebarProps {
-  currentPage: PageView;
-  onNavigate: (page: PageView) => void;
-  userName: string;
+  fullName: string;
   onLogout: () => void;
   isDarkMode: boolean;
   onToggleTheme: () => void;
+  // Removed 'currentPage' and 'onNavigate' props
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, userName, onLogout, isDarkMode, onToggleTheme }) => {
-  const NavItem = ({ page, icon: Icon, label, alertCount }: { page: PageView; icon: any; label: string; alertCount?: number }) => (
+const Sidebar: React.FC<SidebarProps> = ({ fullName, onLogout, isDarkMode, onToggleTheme }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const isActive = (path: string) => location.pathname === path;
+
+  const NavItem = ({ path, icon: Icon, label, alertCount }: { path: string; icon: any; label: string; alertCount?: number }) => (
     <button
-      onClick={() => onNavigate(page)}
+      onClick={() => navigate(path)}
       className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-colors mb-1 ${
-        currentPage === page
+        isActive(path)
           ? 'bg-blue-600 text-white shadow-lg shadow-blue-200 dark:shadow-none'
           : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100'
       }`}
@@ -44,23 +47,24 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, userName, on
       <div className="flex-1 px-4 py-6 overflow-y-auto hide-scrollbar">
         <div className="mb-6">
           <p className="px-4 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Menu</p>
-          <NavItem page="dashboard" icon={LayoutDashboard} label="Dashboard" />
-          <NavItem page="trends" icon={Activity} label="Vitals Trends" />
-          <NavItem page="medications" icon={Pill} label="Medications" />
-          <NavItem page="logs" icon={AlertTriangle} label="Emergency Log" alertCount={2} />
+          {/* Updated paths to match Routes */}
+          <NavItem path="/dashboard" icon={LayoutDashboard} label="Dashboard" />
+          <NavItem path="/trends" icon={Activity} label="Vitals Trends" />
+          <NavItem path="/medications" icon={Pill} label="Medications" />
+          <NavItem path="/logs" icon={AlertTriangle} label="Emergency Log" alertCount={2} />
         </div>
 
         <div>
            <p className="px-4 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Wellness</p>
-           <NavItem page="nutrition" icon={Utensils} label="Diet & Nutrition" />
-           <NavItem page="steps" icon={Footprints} label="Activity & Steps" />
-           <NavItem page="sleep" icon={BedDouble} label="Sleep Cycle" />
-           <NavItem page="health-tips" icon={Sparkles} label="Health Tips" />
+           <NavItem path="/nutrition" icon={Utensils} label="Diet & Nutrition" />
+           <NavItem path="/steps" icon={Footprints} label="Activity & Steps" />
+           <NavItem path="/sleep" icon={BedDouble} label="Sleep Cycle" />
+           <NavItem path="/health-tips" icon={Sparkles} label="Health Tips" />
         </div>
 
         <div className="mt-6">
           <p className="px-4 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Account</p>
-          <NavItem page="settings" icon={Settings} label="Settings & Profile" />
+          <NavItem path="/settings" icon={Settings} label="Settings & Profile" />
         </div>
       </div>
 
@@ -75,10 +79,10 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, userName, on
 
         <div className="flex items-center space-x-3 px-4 py-3 bg-slate-50 dark:bg-slate-800 rounded-xl">
           <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-blue-600 dark:text-blue-300 font-bold">
-            {userName.charAt(0)}
+            {(fullName || 'U').charAt(0)}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{userName}</p>
+            <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{fullName || 'User'}</p>
             <p className="text-xs text-slate-500 dark:text-slate-400 truncate">Patient Account</p>
           </div>
           <button onClick={onLogout} title="Log Out" className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors">

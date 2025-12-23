@@ -28,10 +28,11 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   
   const [countryCode, setCountryCode] = useState('+1');
 
+  // Updated state key 'name' -> 'full_name' to match backend
   const [formData, setFormData] = useState({
     email: '',
     password: '',
-    name: '',
+    full_name: '', 
     age: '',
     phoneNumber: ''
   });
@@ -45,25 +46,25 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       let user: User;
       
       if (isLogin) {
-        // Login Logic
+        // --- Login Logic ---
         if (!formData.email || !formData.password) {
           throw new Error("Please fill in all fields");
         }
         user = await authService.login(formData.email, formData.password);
       } else {
-        // Register Logic
-        if (!formData.email || !formData.password || !formData.name || !formData.phoneNumber) {
+        // --- Register Logic ---
+        if (!formData.email || !formData.password || !formData.full_name || !formData.phoneNumber) {
           throw new Error("Please fill in all required fields");
         }
         
-        // Combine country code and phone number
+        // Combine country code and phone number for backend
         const fullPhoneNumber = `${countryCode} ${formData.phoneNumber}`;
 
         user = await authService.register(
           formData.email, 
           formData.password, 
-          formData.name, 
-          parseInt(formData.age) || 60,
+          formData.full_name, // Matches backend schema
+          parseInt(formData.age) || 0, // Send integer (0 if empty/optional)
           fullPhoneNumber
         );
       }
@@ -151,13 +152,14 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           <form onSubmit={handleSubmit} className="space-y-5">
             {!isLogin && (
               <div className="space-y-5 animate-in slide-in-from-left-4 fade-in duration-300">
+                {/* Full Name Input */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 ml-1">Full Name</label>
                   <input
                     type="text"
                     required={!isLogin}
-                    value={formData.name}
-                    onChange={e => setFormData({...formData, name: e.target.value})}
+                    value={formData.full_name}
+                    onChange={e => setFormData({...formData, full_name: e.target.value})}
                     className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-medium text-slate-700 dark:text-white transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600"
                     placeholder="Margaret Thompson"
                   />

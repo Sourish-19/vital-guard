@@ -1,4 +1,3 @@
-
 export type PageView = 'dashboard' | 'trends' | 'medications' | 'logs' | 'settings' | 'health-tips' | 'nutrition' | 'steps' | 'sleep';
 
 export enum AlertLevel {
@@ -105,10 +104,12 @@ export interface SleepState {
 }
 
 export interface PatientState {
-  name: string;
-  age: number;
   id: string;
-  phoneNumber?: string; 
+  // --- UPDATED FIELDS START ---
+  full_name: string;    // Renamed from 'name' to match Backend/Auth
+  phone_number: string; // Renamed from 'phoneNumber' to match Backend/Auth
+  // --- UPDATED FIELDS END ---
+  age: number;
   telegramBotToken?: string; 
   telegramChatId?: string;   
   heartRate: VitalSign;
@@ -119,7 +120,7 @@ export interface PatientState {
   dailyStepGoal: number; 
   stepPoints: number; 
   stepHistory: StepRecord[]; 
-  sleep: SleepState; // New: Sleep Data
+  sleep: SleepState; 
   status: AlertLevel;
   medications: Medication[];
   logs: EmergencyLog[];
