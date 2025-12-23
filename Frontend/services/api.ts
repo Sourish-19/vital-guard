@@ -1,7 +1,8 @@
 import axios from "axios";
 
 // const API_URL = "https://vitalgaurd-1.onrender.com";
-const API_URL ="http://localhost8000";
+// const API_URL ="http://localhost8000";
+const VITE_API_URL = import.meta.env.VITE_API_URL;
 
 /* =========================
    TYPES

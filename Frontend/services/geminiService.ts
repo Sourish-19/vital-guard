@@ -71,7 +71,7 @@ const simulateChatResponse = (text: string, patient: PatientState): string => {
 const getApiKey = () => {
   try {
     const meta: any = import.meta;
-    if (meta && meta.env && meta.env.VITE_API_KEY) {
+    if (meta && meta.env && meta.env.VITE_GEMINI_API_KEY) {
       return meta.env.VITE_API_KEY;
     }
   } catch (e) {
@@ -92,7 +92,6 @@ const handleApiError = (context: string, error: any) => {
 
 export const generateHealthInsight = async (patient: PatientState): Promise<AIInsight> => {
   try {
-    console.log(import.meta.env.VITE_API_KEY)
     const apiKey = getApiKey();
     if (!apiKey) {
       // Quietly fall back
