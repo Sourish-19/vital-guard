@@ -202,6 +202,10 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 # 5. ROUTES
 # ==========================================
 
+@app.get("/")
+def health_check():
+    return {"status": "VitalGuard Backend is Running", "timestamp": datetime.utcnow()}
+
 @app.post("/signup", response_model=UserResponse)
 async def signup(user: UserSignup):
     database = await get_database()
