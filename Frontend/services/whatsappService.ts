@@ -6,7 +6,7 @@ export const sendWhatsAppAlert = async (phoneNumber: string, message: string): P
     }
 
     try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/send-alert`, {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/send-alert`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
