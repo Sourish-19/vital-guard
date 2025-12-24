@@ -30,6 +30,7 @@ google-generativeai==0.8.6
 googleapis-common-protos==1.72.0
 grpcio==1.76.0
 grpcio-status==1.71.2
+gunicorn==23.0.0
 h11==0.16.0
 httplib2==0.31.0
 idna==3.11
@@ -37,6 +38,7 @@ joblib==1.5.3
 motor==3.7.1
 multidict==6.7.0
 numpy==2.2.6
+packaging==25.0
 passlib==1.7.4
 propcache==0.4.1
 proto-plus==1.27.0
