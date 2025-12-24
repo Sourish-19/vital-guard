@@ -2,8 +2,10 @@ import os
 import requests
 import joblib
 import numpy as np
+import certifi  # ✅ Fix for SSL Error
 from datetime import datetime, timedelta
 from typing import List, Optional
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,19 +14,28 @@ from pydantic import BaseModel, EmailStr, Field
 from motor.motor_asyncio import AsyncIOMotorClient
 from passlib.context import CryptContext
 from jose import JWTError, jwt
-from bson import ObjectId
+from dotenv import load_dotenv
+
+# ==========================================
+# 0. LOAD ENVIRONMENT VARIABLES
+# ==========================================
+# Load .env from current directory
+env_path = Path('.') / '.env'
+load_dotenv(dotenv_path=env_path)
 
 # ==========================================
 # 1. CONFIGURATION & SETUP
 # ==========================================
 
 # --- Security Config ---
-SECRET_KEY = "supersecretkey_change_this_in_production"
+# Default to a safe fallback for local testing if env is missing
+SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey_change_this_in_production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 # --- Database Config ---
-MONGO_URL = "mongodb+srv://sourishsrivignesh_db_user:XyN33Z0orcsGitTV@smartsos.h7lzzgn.mongodb.net/?appName=SmartSOS"
+# Default to local mongo if env is missing
+MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017")
 DB_NAME = "vitalguard_db"
 USER_COLLECTION = "users"
 
@@ -32,7 +43,6 @@ USER_COLLECTION = "users"
 MODEL_PATH = "vitalguard_model.pkl"
 
 # --- Global Objects ---
-# NOTE: Using 'bcrypt' scheme. Ensure 'bcrypt==3.2.0' is installed or use 'argon2'
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
@@ -40,14 +50,21 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 SOS_LOGS = []
 
 # ==========================================
-# 2. FASTAPI APP & MIDDLEWARE
+# 2. FASTAPI APP & CORS
 # ==========================================
 
 app = FastAPI(title="VitalGuard: Auth & SOS API")
 
+# ✅ UPDATED CORS: Allow your specific Vercel Frontend
+origins = [
+    "http://localhost:5173",  # Local React development
+    "http://localhost:3000",  # Alternative local port
+    "https://vitalgaurd-mmeu.vercel.app"  # 🚀 YOUR DEPLOYED FRONTEND
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -67,11 +84,24 @@ async def get_database():
 
 @app.on_event("startup")
 async def startup_event():
-    # Connect to MongoDB
-    db.client = AsyncIOMotorClient(MONGO_URL)
-    print("✅ Connected to MongoDB")
-    
-    # Load ML Model
+    print(f"🔄 Connecting to MongoDB at: {MONGO_URL[:20]}...") 
+    try:
+        # ⚠️ BYPASS SSL VERIFICATION (Only for local testing/debugging)
+        # This fixes the [SSL: TLSV1_ALERT_INTERNAL_ERROR] on Windows
+        db.client = AsyncIOMotorClient(
+            MONGO_URL, 
+            tlsCAFile=certifi.where(),
+            tlsAllowInvalidCertificates=True  # <--- ADD THIS LINE
+        )
+        
+        # Ping to force a connection check immediately
+        await db.client.admin.command('ping')
+        print("✅ Connected to MongoDB successfully!")
+        
+    except Exception as e:
+        print(f"❌ Database Connection Failed: {e}")
+
+    # Load ML Model (Keep this part same as before)
     global model, FEATURES
     try:
         if os.path.exists(MODEL_PATH):
@@ -87,6 +117,7 @@ async def startup_event():
         print(f"❌ Error loading model: {e}")
         model = None
 
+
 @app.on_event("shutdown")
 async def shutdown_event():
     if db.client:
@@ -97,7 +128,6 @@ async def shutdown_event():
 # 4. PYDANTIC MODELS
 # ==========================================
 
-# --- Auth Models ---
 class UserSignup(BaseModel):
     full_name: str = Field(..., min_length=3, max_length=100)
     email: EmailStr
@@ -109,7 +139,6 @@ class UserLogin(BaseModel):
     email: EmailStr
     password: str
 
-# NEW: Model for Profile Updates
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     age: Optional[int] = None
@@ -128,7 +157,6 @@ class UserResponse(BaseModel):
     phone_number: str
     age: Optional[int]
 
-# --- SOS/ML Models ---
 class VitalSigns(BaseModel):
     heart_rate: float
     spo2: float
@@ -199,13 +227,11 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 @app.post("/signup", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def signup(user: UserSignup):
     database = await get_database()
-    
     existing_user = await database[USER_COLLECTION].find_one({"email": user.email})
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
     
     hashed_password = get_password_hash(user.password)
-    
     user_dict = {
         "full_name": user.full_name,
         "email": user.email,
@@ -248,12 +274,9 @@ async def read_users_me(current_user: dict = Depends(get_current_user)):
         "age": current_user.get("age")
     }
 
-# NEW: Update Profile Endpoint
 @app.put("/users/me", response_model=UserResponse)
 async def update_user_me(user_update: UserUpdate, current_user: dict = Depends(get_current_user)):
     database = await get_database()
-    
-    # Filter out None values to avoid overwriting with null
     update_data = {k: v for k, v in user_update.dict().items() if v is not None}
     
     if len(update_data) >= 1:
@@ -262,9 +285,7 @@ async def update_user_me(user_update: UserUpdate, current_user: dict = Depends(g
             {"$set": update_data}
         )
     
-    # Fetch updated user to return
     updated_user = await database[USER_COLLECTION].find_one({"_id": current_user["_id"]})
-    
     return {
         "id": str(updated_user["_id"]),
         "full_name": updated_user["full_name"],
@@ -279,7 +300,7 @@ async def update_user_me(user_update: UserUpdate, current_user: dict = Depends(g
 
 @app.get("/")
 def root():
-    return {"status": "VitalGuard Backend Running"}
+    return {"status": "VitalGuard Backend Running", "cors_enabled_for": origins}
 
 @app.post("/predict")
 def predict(data: VitalSigns):
@@ -287,7 +308,6 @@ def predict(data: VitalSigns):
         raise HTTPException(status_code=500, detail="ML Model not loaded on server.")
 
     X = np.array([[getattr(data, f) for f in FEATURES]])
-    
     pred = int(model.predict(X)[0])
     probs = model.predict_proba(X)[0]
     risk_score = int(probs[2] * 100) if len(probs) > 2 else int(probs[1] * 100)
@@ -303,7 +323,6 @@ def reverse_geocode(lat: float, lon: float):
     url = "https://nominatim.openstreetmap.org/reverse"
     params = {"format": "json", "lat": lat, "lon": lon}
     headers = {"User-Agent": "VitalGuard/1.0"}
-    
     try:
         response = requests.get(url, params=params, headers=headers, timeout=5)
         return response.json()
@@ -313,7 +332,6 @@ def reverse_geocode(lat: float, lon: float):
 @app.post("/sos")
 def trigger_sos(data: SOSRequest):
     timestamp = data.timestamp or datetime.utcnow().isoformat()
-    
     log_entry = {
         "id": len(SOS_LOGS) + 1,
         "timestamp": timestamp,
@@ -322,10 +340,8 @@ def trigger_sos(data: SOSRequest):
         "vitals": data.vitals,
         "resolved": False
     }
-    
     SOS_LOGS.append(log_entry)
     print(f"\n🚨 SOS TRIGGERED | Risk: {data.risk_level} | Loc: {data.location}")
-    
     return {
         "status": "SOS triggered successfully",
         "timestamp": timestamp,
@@ -336,10 +352,7 @@ def trigger_sos(data: SOSRequest):
 def get_sos_logs():
     return SOS_LOGS
 
-# ==========================================
-# 8. MAIN EXECUTION
-# ==========================================
-
 if __name__ == "__main__":
     import uvicorn
+    # Use 0.0.0.0 for deployment visibility
     uvicorn.run(app, host="0.0.0.0", port=8000)
