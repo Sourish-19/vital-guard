@@ -167,7 +167,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 
                 {/* Phone Number with Country Code */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 ml-1">Phone Number (ft. Telegram Alerts)</label>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 ml-1">Phone Number (ft. WhatsApp Alerts)</label>
                   <div className="flex relative rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all">
                     <div className="relative border-r border-slate-200 dark:border-slate-700">
                       <select 

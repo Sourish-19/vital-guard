@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MessageCircle, X, Send, Bot } from 'lucide-react';
 import { PatientState } from '../types';
-import { getChatResponse } from '../services/geminiService';
 
 interface ChatAssistantProps {
   patient: PatientState;
@@ -17,7 +16,6 @@ const ChatAssistant: React.FC<ChatAssistantProps> = ({ patient }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   
-  // Initial greeting using patient name
   const [messages, setMessages] = useState<Message[]>([
     { 
       id: '1', 
@@ -37,28 +35,13 @@ const ChatAssistant: React.FC<ChatAssistantProps> = ({ patient }) => {
     scrollToBottom();
   }, [messages, isOpen]);
 
-  // --- LOCAL FALLBACK LOGIC (Runs when API Quota Exceeds) ---
+  // Fallback Logic (if backend AI fails)
   const getFallbackResponse = (query: string, patientData: PatientState) => {
     const q = query.toLowerCase();
-    
-    if (q.includes('heart') || q.includes('rate') || q.includes('pulse')) {
-      return `Your heart rate is currently ${patientData.heartRate.value} BPM. This is considered ${patientData.status === 'STABLE' ? 'normal' : 'high'} for your age.`;
-    }
-    if (q.includes('pressure') || q.includes('bp')) {
-      return `Your latest blood pressure reading is ${patientData.bloodPressure.systolic}/${patientData.bloodPressure.diastolic}.`;
-    }
-    if (q.includes('diet') || q.includes('food') || q.includes('eat')) {
-      return "Based on your vitals, I recommend sticking to a low-sodium diet rich in leafy greens and lean proteins. Make sure to stay hydrated!";
-    }
-    if (q.includes('emergency') || q.includes('help') || q.includes('sos')) {
-      return "If you are feeling unwell, please press the red SOS button at the top of the screen immediately to notify your emergency contacts.";
-    }
-    if (q.includes('hello') || q.includes('hi')) {
-      return `Hello ${patientData.full_name}! I'm here to help you monitor your health.`;
-    }
-    
-    // Default fallback
-    return "I've noted that. I'm currently running in offline mode due to connection limits, but your vitals look stable. Is there anything specific about your readings you'd like to know?";
+    if (q.includes('heart') || q.includes('rate')) return `Your heart rate is currently ${patientData.heartRate.value} BPM.`;
+    if (q.includes('pressure') || q.includes('bp')) return `Your blood pressure is ${patientData.bloodPressure.systolic}/${patientData.bloodPressure.diastolic}.`;
+    if (q.includes('hello') || q.includes('hi')) return `Hello ${patientData.full_name}! I'm here to help.`;
+    return "I'm running in offline mode. Your vitals look stable.";
   };
 
   const handleSend = async (e?: React.FormEvent) => {
@@ -73,33 +56,37 @@ const ChatAssistant: React.FC<ChatAssistantProps> = ({ patient }) => {
     setIsLoading(true);
 
     try {
-      // 1. Try to fetch from Real AI
-      const responseText = await getChatResponse(userText, patient);
-      
-      const aiMessage: Message = { 
-        id: (Date.now() + 1).toString(), 
-        role: 'model', 
-        text: responseText 
-      };
+      // 🚀 Call YOUR Backend
+      const response = await fetch('http://localhost:8000/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: userText,
+          patient_context: {
+            full_name: patient.full_name,
+            heart_rate: patient.heartRate.value,
+            bp_sys: patient.bloodPressure.systolic,
+            bp_dia: patient.bloodPressure.diastolic
+          }
+        })
+      });
+
+      if (!response.ok) throw new Error("Backend AI failed");
+
+      const data = await response.json();
+      const aiMessage: Message = { id: (Date.now() + 1).toString(), role: 'model', text: data.reply };
       setMessages(prev => [...prev, aiMessage]);
 
-    } catch (error: any) {
-      console.warn('AI API Error (Falling back to local mode):', error);
-      
-      // 2. CATCH QUOTA ERRORS: Use Fallback instead of showing an error message
+    } catch (error) {
+      console.warn('Backend Error (Using Local Fallback):', error);
+      // Fallback
       setTimeout(() => {
         const fallbackText = getFallbackResponse(userText, patient);
-        
-        const fallbackMessage: Message = { 
-          id: (Date.now() + 1).toString(), 
-          role: 'model', 
-          text: fallbackText 
-        };
+        const fallbackMessage: Message = { id: (Date.now() + 1).toString(), role: 'model', text: fallbackText };
         setMessages(prev => [...prev, fallbackMessage]);
         setIsLoading(false); 
-      }, 1000); // Small fake delay to feel natural
-      
-      return; 
+      }, 1000);
+      return;
     }
 
     setIsLoading(false);
@@ -107,7 +94,6 @@ const ChatAssistant: React.FC<ChatAssistantProps> = ({ patient }) => {
 
   return (
     <>
-      {/* Floating Action Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`fixed bottom-6 right-6 z-40 p-4 rounded-full shadow-2xl transition-all duration-300 hover:scale-110 ${
@@ -117,18 +103,14 @@ const ChatAssistant: React.FC<ChatAssistantProps> = ({ patient }) => {
         {isOpen ? <X size={28} /> : <MessageCircle size={28} />}
       </button>
 
-      {/* Chat Window */}
       <div 
         className={`fixed bottom-24 right-6 w-96 max-w-[calc(100vw-3rem)] bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden z-40 transition-all duration-300 origin-bottom-right ${
           isOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-10 pointer-events-none'
         }`}
         style={{ height: '500px' }}
       >
-        {/* Header */}
         <div className="bg-slate-900 dark:bg-slate-800 text-white p-4 flex items-center space-x-3">
-           <div className="bg-indigo-500 p-2 rounded-lg">
-             <Bot size={20} />
-           </div>
+           <div className="bg-indigo-500 p-2 rounded-lg"><Bot size={20} /></div>
            <div>
              <h3 className="font-bold">Health Assistant</h3>
              <p className="text-xs text-slate-400 flex items-center gap-1">
@@ -138,17 +120,10 @@ const ChatAssistant: React.FC<ChatAssistantProps> = ({ patient }) => {
            </div>
         </div>
 
-        {/* Messages Area */}
         <div className="h-[360px] overflow-y-auto p-4 bg-slate-50 dark:bg-slate-950 space-y-4">
           {messages.map((msg) => (
             <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div 
-                className={`max-w-[80%] p-3 rounded-2xl text-sm leading-relaxed ${
-                  msg.role === 'user' 
-                    ? 'bg-blue-600 text-white rounded-br-none' 
-                    : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-bl-none shadow-sm'
-                }`}
-              >
+              <div className={`max-w-[80%] p-3 rounded-2xl text-sm leading-relaxed ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-bl-none shadow-sm'}`}>
                 {msg.text}
               </div>
             </div>
@@ -156,7 +131,7 @@ const ChatAssistant: React.FC<ChatAssistantProps> = ({ patient }) => {
           {isLoading && (
             <div className="flex justify-start">
                <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3 rounded-2xl rounded-bl-none shadow-sm flex space-x-1">
-                 <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
+                 <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></div>
                  <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                  <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
                </div>
@@ -165,7 +140,6 @@ const ChatAssistant: React.FC<ChatAssistantProps> = ({ patient }) => {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input Area */}
         <form onSubmit={handleSend} className="p-3 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2">
           <input 
             value={input}
@@ -173,11 +147,7 @@ const ChatAssistant: React.FC<ChatAssistantProps> = ({ patient }) => {
             placeholder="Ask about your health..." 
             className="flex-1 p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm text-slate-900 dark:text-white placeholder:text-slate-400"
           />
-          <button 
-            type="submit" 
-            disabled={!input.trim() || isLoading}
-            className="p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
+          <button type="submit" disabled={!input.trim() || isLoading} className="p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors">
             <Send size={18} />
           </button>
         </form>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Phone, Shield, Volume2, Plus, Trash2, Save, Activity, Smartphone, MapPin, Send, HelpCircle, Eye, EyeOff } from 'lucide-react';
+import { User, Phone, Shield, Volume2, Plus, Trash2, Save, Activity, Smartphone, MapPin, Send, HelpCircle, MessageCircle } from 'lucide-react';
 import { PatientState, EmergencyContact } from '../types';
 
 interface SettingsProps {
@@ -48,13 +48,6 @@ const Settings: React.FC<SettingsProps> = ({ patient, onUpdateProfile, onAddCont
     });
   }, [patient.full_name, patient.age, patient.phone_number, patient.location?.address]);
 
-  // --- Telegram Config State ---
-  const [telegramConfig, setTelegramConfig] = useState({
-    botToken: patient.telegramBotToken || '',
-    chatId: patient.telegramChatId || ''
-  });
-  const [showToken, setShowToken] = useState(false);
-
   // --- Alarm Volume State ---
   const [volume, setVolume] = useState(80);
 
@@ -72,21 +65,7 @@ const Settings: React.FC<SettingsProps> = ({ patient, onUpdateProfile, onAddCont
       age: Number(profileForm.age),
       location: { ...patient.location, address: profileForm.address }
     });
-    // Optional: Add a visual toast here instead of alert
     alert("Profile updated successfully!");
-  };
-
-  const handleSaveTelegram = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!telegramConfig.botToken.trim() || !telegramConfig.chatId.trim()) {
-      alert("Please enter both Bot Token and Chat ID before saving.");
-      return;
-    }
-    onUpdateProfile({
-        telegramBotToken: telegramConfig.botToken.trim(),
-        telegramChatId: telegramConfig.chatId.trim()
-    });
-    alert("Telegram settings saved!");
   };
 
   const handleAddContactSubmit = (e: React.FormEvent) => {
@@ -149,13 +128,15 @@ const Settings: React.FC<SettingsProps> = ({ patient, onUpdateProfile, onAddCont
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 ml-1">Phone Number</label>
+                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 ml-1">Phone Number (WhatsApp)</label>
                     <input 
                       type="tel" 
                       value={profileForm.phone_number}
                       onChange={(e) => setProfileForm({...profileForm, phone_number: e.target.value})}
+                      placeholder="+91..."
                       className="w-full p-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold rounded-xl focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900 focus:border-blue-600 dark:focus:border-blue-500 outline-none transition-all shadow-sm text-lg"
                     />
+                    <p className="text-xs text-slate-400 mt-1 ml-1">Must include country code (e.g., +91)</p>
                   </div>
 
                   <div>
@@ -286,83 +267,43 @@ const Settings: React.FC<SettingsProps> = ({ patient, onUpdateProfile, onAddCont
 
               <div className="space-y-8">
                 
-                {/* Telegram Configuration */}
-                <div className="bg-sky-50 dark:bg-sky-900/20 p-5 rounded-xl border border-sky-100 dark:border-sky-800">
+                {/* WhatsApp/Twilio Configuration */}
+                <div className="bg-emerald-50 dark:bg-emerald-900/20 p-5 rounded-xl border border-emerald-100 dark:border-emerald-800">
                   <div className="flex items-center space-x-3 mb-4">
-                      <div className="bg-[#0088cc] p-2 rounded-lg text-white"><Send size={20} /></div>
-                      <h4 className="font-bold text-slate-900 dark:text-white">Real Telegram Notifications</h4>
+                      <div className="bg-[#25D366] p-2 rounded-lg text-white"><MessageCircle size={20} /></div>
+                      <h4 className="font-bold text-slate-900 dark:text-white">WhatsApp Alerts (Twilio Sandbox)</h4>
                   </div>
                   
-                  <div className="bg-blue-100 dark:bg-blue-900/40 p-4 rounded-lg flex items-start gap-3 mb-6">
-                    <HelpCircle size={18} className="text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
-                    <div className="text-xs text-blue-800 dark:text-blue-300 space-y-2">
-                       <p className="font-bold">How to connect Telegram:</p>
-                       <ol className="list-decimal ml-4 space-y-1.5">
+                  <div className="bg-white dark:bg-slate-900 p-4 rounded-lg flex items-start gap-3 mb-6 shadow-sm">
+                    <HelpCircle size={18} className="text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
+                    <div className="text-xs text-slate-600 dark:text-slate-300 space-y-2">
+                       <p className="font-bold text-emerald-700 dark:text-emerald-400">Required: Join the Sandbox</p>
+                       <p>Because we are using the free Twilio API, you <b>must</b> verify your phone number to receive alerts.</p>
+                       <ol className="list-decimal ml-4 space-y-1.5 mt-2">
                          <li>
-                           Open <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" className="underline font-bold hover:text-blue-600">@BotFather</a>, create a new bot, and copy the <b>HTTP API Token</b>.
+                           Open WhatsApp on your phone.
                          </li>
                          <li>
-                           Open <a href="https://t.me/userinfobot" target="_blank" rel="noreferrer" className="underline font-bold hover:text-blue-600">@userinfobot</a> to get your personal <b>Id</b>.
+                           Send the code <code className="bg-slate-100 dark:bg-slate-700 px-1 py-0.5 rounded border border-slate-300 dark:border-slate-600 font-mono text-emerald-600">join your-sandbox-code</code> to <b className="text-slate-900 dark:text-white">+1 415 523 8886</b>.
                          </li>
                          <li>
-                           <b>Start your bot:</b> Search for your new bot's username and click <b>Start</b> (or send <code>/start</code>).
+                           <i>(Note: Check your Twilio Console for your specific join code).</i>
                          </li>
                        </ol>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                         <div className="flex justify-between">
-                             <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Bot Token</label>
-                         </div>
-                         <div className="relative mt-1">
-                           <input 
-                             type={showToken ? "text" : "password"}
-                             placeholder="e.g. 123456:ABC-DEF..."
-                             className="w-full p-2.5 pr-10 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-800 text-sm font-mono text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-sky-500 outline-none"
-                             value={telegramConfig.botToken}
-                             onChange={(e) => setTelegramConfig({...telegramConfig, botToken: e.target.value})}
-                             autoComplete="off"
-                             spellCheck="false"
-                           />
-                           <button 
-                             type="button"
-                             onClick={() => setShowToken(!showToken)}
-                             className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
-                           >
-                             {showToken ? <EyeOff size={16} /> : <Eye size={16} />}
-                           </button>
-                         </div>
+                  <div className="flex justify-between items-center mt-4">
+                      <div className="text-xs text-slate-400 italic">
+                        Alerts will be sent to: <b>{profileForm.phone_number || "No number set"}</b>
                       </div>
-                      <div>
-                         <div className="flex justify-between">
-                             <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Chat ID</label>
-                         </div>
-                         <input 
-                           type="text"
-                           placeholder="e.g. 987654321"
-                           className="w-full p-2.5 mt-1 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-800 text-sm font-mono text-slate-800 dark:text-slate-200 focus:ring-2 focus:ring-sky-500 outline-none"
-                           value={telegramConfig.chatId}
-                           onChange={(e) => setTelegramConfig({...telegramConfig, chatId: e.target.value})}
-                           autoComplete="off"
-                           spellCheck="false"
-                         />
-                      </div>
-                  </div>
-                  <div className="flex justify-between items-center mt-4 pt-4 border-t border-sky-200 dark:border-sky-800">
-                      <button 
-                        onClick={handleSaveTelegram}
-                        className="text-sky-700 dark:text-sky-300 font-bold text-sm hover:underline"
-                      >
-                        Save Credentials
-                      </button>
                       <button 
                         onClick={onTestWhatsApp}
-                        className="px-4 py-2 bg-[#0088cc] text-white font-bold rounded-lg hover:bg-[#0077b5] transition-colors text-sm shadow-sm flex items-center gap-2"
+                        disabled={!profileForm.phone_number}
+                        className="px-4 py-2 bg-[#25D366] text-white font-bold rounded-lg hover:bg-[#20bd5a] transition-colors text-sm shadow-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Send size={14} />
-                        Test Telegram
+                        Test WhatsApp Alert
                       </button>
                   </div>
                 </div>

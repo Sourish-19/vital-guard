@@ -39,6 +39,7 @@ export interface EmergencyLog {
   notes: string;
 }
 
+// ✅ Synced with Backend EmergencyContact model
 export interface EmergencyContact {
   id: string;
   name: string;
@@ -60,7 +61,7 @@ export interface FoodItem {
 }
 
 export interface NutritionState {
-  isConfigured: boolean; // New flag for onboarding
+  isConfigured: boolean;
   weight: number; // kg
   height: number; // cm
   goal: 'lose' | 'maintain' | 'gain';
@@ -105,28 +106,33 @@ export interface SleepState {
 
 export interface PatientState {
   id: string;
-  // --- UPDATED FIELDS START ---
-  full_name: string;    // Renamed from 'name' to match Backend/Auth
-  phone_number: string; // Renamed from 'phoneNumber' to match Backend/Auth
-  // --- UPDATED FIELDS END ---
+  
+  // --- USER PROFILE (Synced with DB) ---
+  full_name: string;    
+  phone_number: string; // Used for WhatsApp Alerts
   age: number;
-  telegramBotToken?: string; 
-  telegramChatId?: string;   
+  // Removed Telegram fields (botToken/chatId) as we now use Twilio/WhatsApp
+
+  // --- VITALS SENSORS ---
   heartRate: VitalSign;
   bloodPressure: BloodPressure;
   oxygenLevel: VitalSign;
   temperature: VitalSign; 
+  
+  // --- ACTIVITY & SLEEP ---
   steps: VitalSign; 
   dailyStepGoal: number; 
   stepPoints: number; 
   stepHistory: StepRecord[]; 
   sleep: SleepState; 
+  nutrition: NutritionState; 
+
+  // --- SYSTEM STATE ---
   status: AlertLevel;
   medications: Medication[];
   logs: EmergencyLog[];
-  contacts: EmergencyContact[];
+  contacts: EmergencyContact[]; // Loaded from DB
   location: { lat: number; lng: number; address: string };
-  nutrition: NutritionState; 
 }
 
 export interface AIInsight {

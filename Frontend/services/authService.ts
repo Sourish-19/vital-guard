@@ -12,6 +12,7 @@ export interface User {
   age?: number;
   telegramBotToken?: string;
   telegramChatId?: string;
+  contacts?: EmergencyContact[]
   nutrition?: NutritionState;
 }
 

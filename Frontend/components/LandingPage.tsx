@@ -13,7 +13,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLaunch, isDarkMode, onToggl
     <div className="min-h-screen bg-white dark:bg-slate-950 font-sans text-slate-900 dark:text-white selection:bg-blue-100 selection:text-blue-900 transition-colors duration-300">
       
       {/* Navbar */}
-      <nav className="fixed w-full z-50 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border-b border-slate-100 dark:border-slate-800 transition-colors duration-300">
+      <nav className="fixed w-full top-0 right-0 left-0 z-50 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border-b border-slate-100 dark:border-slate-800 transition-colors duration-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
             <div className="flex items-center space-x-2">
@@ -63,13 +63,9 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLaunch, isDarkMode, onToggl
               <div className="flex flex-col sm:flex-row gap-4 mb-12">
                 <button 
                   onClick={onLaunch}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-xl font-bold text-lg transition-all shadow-xl hover:shadow-blue-600/30 hover:-translate-y-1 flex items-center justify-center gap-2"
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-bold text-lg transition-all shadow-xl hover:shadow-blue-600/30 hover:-translate-y-1 flex items-center justify-center gap-2"
                 >
                   Launch Guardian Dashboard
-                </button>
-                <button className="px-8 py-4 rounded-xl font-bold text-lg text-blue-600 dark:text-blue-400 border-2 border-blue-100 dark:border-blue-900 hover:border-blue-200 dark:hover:border-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all flex items-center justify-center gap-2">
-                  <Play size={20} fill="currentColor" />
-                  Watch How It Works
                 </button>
               </div>
 

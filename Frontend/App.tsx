@@ -11,7 +11,8 @@ import {
 
 import { generateHealthInsight } from "./services/geminiService";
 import { authService, User } from "./services/authService";
-import { sendTelegramMessage } from "./services/telegramService";
+// ✅ Make sure this file exists in src/services/
+import { sendWhatsAppAlert } from "./services/whatsappService"; 
 
 import Sidebar from "./components/Sidebar";
 import Dashboard from "./components/Dashboard";
@@ -233,6 +234,7 @@ function App() {
     initAuth();
   }, []);
 
+  // ✅ UPDATED: Loads contacts from DB on login
   const handleLoginSuccess = (user: User) => {
     setPatient((prev) => ({
       ...prev,
@@ -240,8 +242,7 @@ function App() {
       full_name: user.full_name,
       age: user.age || prev.age,
       phone_number: user.phone_number,
-      telegramBotToken: user.telegramBotToken || "",
-      telegramChatId: user.telegramChatId || "",
+      contacts: user.contacts || [], // Load from DB
       nutrition: user.nutrition || prev.nutrition,
     }));
     setIsAuthenticated(true);
@@ -289,10 +290,46 @@ function App() {
     osc.stop(ctx.currentTime + duration);
   };
 
+  // ✅ UPDATED: Sends WhatsApp Alert using Phone Number
+  // ✅ UPDATED: Send Alerts to ALL Saved Contacts
   const notifyCaregiver = async (message: string) => {
     const currentPatient = patientRef.current;
-    if (!currentPatient.telegramBotToken || !currentPatient.telegramChatId) return;
-    try { await sendTelegramMessage(currentPatient.telegramBotToken, currentPatient.telegramChatId, message); } catch (e) { console.error("Telegram error", e); }
+    const contacts = currentPatient.contacts;
+
+    // 1. Validation: Do we have contacts?
+    if (!contacts || contacts.length === 0) {
+        addNotification("system", "No Contacts", "Please add emergency contacts in Settings.");
+        console.warn("❌ No emergency contacts found.");
+        return;
+    }
+
+    addNotification("whatsapp", "Sending Alerts", `Notifying ${contacts.length} contact(s)...`);
+
+    // 2. Loop through every contact and send the message
+    // We use Promise.all to send them in parallel (faster)
+    const results = await Promise.all(
+        contacts.map(async (contact) => {
+            if (!contact.phone) return { name: contact.name, status: "skipped" };
+
+            try {
+                // Send the alert to this specific contact's phone
+                const success = await sendWhatsAppAlert(contact.phone, message);
+                return { name: contact.name, status: success ? "sent" : "failed" };
+            } catch (error) {
+                console.error(`Failed to alert ${contact.name}:`, error);
+                return { name: contact.name, status: "error" };
+            }
+        })
+    );
+
+    // 3. Log results
+    const sentCount = results.filter(r => r.status === "sent").length;
+    if (sentCount > 0) {
+        addNotification("whatsapp", "Alerts Sent", `Successfully alerted ${sentCount} contact(s).`);
+        speak(`Emergency contacts have been notified.`);
+    } else {
+        addNotification("system", "Delivery Failed", "Could not reach contacts. Did they join the Sandbox?");
+    }
   };
 
   const getAddressFromCoords = async (lat: number, lng: number) => {
@@ -358,9 +395,9 @@ function App() {
 
       if (updatesNeeded) {
         medsToNotify.forEach((med) => {
-          const msg = `⚠️ *Medication Reminder*\n\nPatient ${currentPatient.full_name} missed their dose of *${med.name}* at ${med.time}.\n\nAlerting primary contact: ${contactInfo}`;
+          const msg = `⚠️ *Medication Reminder*\n\nPatient ${currentPatient.full_name} missed their dose of *${med.name}* at ${med.time}.`;
           notifyCaregiver(msg);
-          speak(`Attention. You missed your ${med.name}. I have notified ${primaryContact ? primaryContact.name : "your caregiver"}.`);
+          speak(`Attention. You missed your ${med.name}. I have notified your caregiver.`);
           addNotification("whatsapp", "Medication Missed", `Alert sent to ${contactInfo}. Please take ${med.name}.`);
         });
         setPatient((prev) => ({ ...prev, medications: updatedMeds, logs: [...newLogs, ...prev.logs] }));
@@ -402,6 +439,7 @@ function App() {
 
   // --- Event Handlers ---
   const handleUpdateStepGoal = (newGoal: number) => { setPatient((prev) => ({ ...prev, dailyStepGoal: newGoal })); addNotification("system", "Goal Updated", `Daily step target set to ${newGoal.toLocaleString()}`); };
+  
   const handleManualSOS = (type: "cardiac" | "fall" = "cardiac") => {
     setIsTestMode(false);
     const newLog: EmergencyLogType = { id: Date.now().toString(), timestamp: new Date().toLocaleTimeString(), type: type === "fall" ? "Fall Detection" : "Critical Vitals Spike", resolved: false, notes: type === "fall" ? "Sudden impact detected." : "Heart rate spike > 140 BPM." };
@@ -409,11 +447,14 @@ function App() {
     setShowSOSModal(true);
     setSosCountdown(10);
     speak(type === "fall" ? "Fall detected. Calling emergency contacts." : "Warning. Heart rate anomaly detected.");
+    // WhatsApp Alert
     notifyCaregiver(`🚨 *SOS EMERGENCY ALERT* 🚨\n\nPatient: ${patientRef.current.full_name}\nStatus: CRITICAL\nLocation: ${patientRef.current.location.address}`);
     setTimeout(() => fetchInsight({ ...patientRef.current, status: AlertLevel.CRITICAL }), 1000);
   };
+  
   const triggerChaos = () => handleManualSOS("cardiac");
   const triggerFall = () => handleManualSOS("fall");
+  
   const handleSystemTest = () => {
     setIsTestMode(true);
     setPatient((prev) => ({ ...prev, logs: [{ id: Date.now().toString(), timestamp: new Date().toLocaleTimeString(), type: "System Test", resolved: true, notes: "User initiated diagnostic." }, ...prev.logs] }));
@@ -421,11 +462,29 @@ function App() {
     setSosCountdown(5);
     speak("System test initiated.");
   };
+
+  // ✅ UPDATED: Manual WhatsApp Test
   const handleNotificationTest = async () => {
-    addNotification("whatsapp", "Telegram Bot", "Sending test message...");
-    const success = await sendTelegramMessage(patient.telegramBotToken || "", patient.telegramChatId || "", "🏥 *SmartSOS Test Message*\n\nYour notification system is working correctly.");
-    if (success) { speak("Test message sent."); addNotification("whatsapp", "Telegram Bot", "Success! Check your Telegram app."); } else { speak("Could not send message."); addNotification("system", "Connection Failed", "Check your Bot Token/Chat ID."); }
+    if (!patient.phone_number) {
+        addNotification("system", "Missing Phone Number", "Please set a phone number in settings first.");
+        return;
+    }
+
+    addNotification("whatsapp", "WhatsApp Alert", "Sending test message via Twilio...");
+    const success = await sendWhatsAppAlert(
+        patient.phone_number, 
+        "🏥 *SmartSOS Test Message*\n\nYour notification system is working correctly."
+    );
+    
+    if (success) { 
+        speak("Test message sent."); 
+        addNotification("whatsapp", "WhatsApp Alert", "Success! Check your WhatsApp."); 
+    } else { 
+        speak("Could not send message."); 
+        addNotification("system", "Connection Failed", "Check server logs or Twilio keys."); 
+    }
   };
+
   const resolveEmergency = () => {
     setPatient((prev) => ({ ...prev, status: AlertLevel.STABLE, logs: prev.logs.map((log) => !log.resolved ? { ...log, resolved: true, notes: `${log.notes} [User Acknowledged]` } : log) }));
     setShowSOSModal(false);
@@ -433,8 +492,10 @@ function App() {
     if (!isTestMode) { notifyCaregiver(`✅ *Alert Resolved*\n\nPatient ${patientRef.current.full_name} has marked themselves as safe.`); fetchInsight({ ...patientRef.current, status: AlertLevel.STABLE }); }
     setIsTestMode(false);
   };
+  
   const handleToggleMedication = (id: string) => { setPatient((prev) => ({ ...prev, medications: prev.medications.map((med) => med.id === id ? { ...med, taken: !med.taken } : med) })); };
   const handleAddMedication = (newMed: Omit<Medication, "id" | "taken">) => { setPatient((prev) => ({ ...prev, medications: [...prev.medications, { ...newMed, id: Date.now().toString(), taken: false, reminderSent: false }] })); };
+  
   const handleUpdateProfile = async (updates: Partial<PatientState>) => {
     setPatient((prev) => ({ ...prev, ...updates }));
     const user = authService.getCurrentUser();
@@ -443,12 +504,48 @@ function App() {
     if (updates.full_name) userUpdates.full_name = updates.full_name;
     if (updates.age) userUpdates.age = updates.age;
     if (updates.phone_number) userUpdates.phone_number = updates.phone_number;
-    if (updates.telegramBotToken !== undefined) userUpdates.telegramBotToken = updates.telegramBotToken;
-    if (updates.telegramChatId !== undefined) userUpdates.telegramChatId = updates.telegramChatId;
     if (Object.keys(userUpdates).length > 0) await authService.updateUser(user.id, userUpdates);
   };
-  const handleAddContact = (contact: Omit<EmergencyContact, "id">) => { setPatient((prev) => ({ ...prev, contacts: [...prev.contacts, { ...contact, id: Date.now().toString() }] })); };
-  const handleRemoveContact = (id: string) => { setPatient((prev) => ({ ...prev, contacts: prev.contacts.filter((c) => c.id !== id) })); };
+
+  // ✅ UPDATED: Add Contact with DB Sync
+  const handleAddContact = async (contact: Omit<EmergencyContact, "id">) => {
+    const newContact = { ...contact, id: Date.now().toString() };
+    const updatedContacts = [...patient.contacts, newContact];
+    
+    // UI Update
+    setPatient((prev) => ({ ...prev, contacts: updatedContacts }));
+
+    // DB Update
+    const user = authService.getCurrentUser();
+    if (user) {
+      try {
+        await authService.updateUser(user.id, { contacts: updatedContacts });
+        console.log("✅ Contact saved to DB");
+      } catch (e) {
+        console.error("❌ Failed to save contact:", e);
+      }
+    }
+  };
+
+  // ✅ UPDATED: Remove Contact with DB Sync
+  const handleRemoveContact = async (id: string) => {
+    const updatedContacts = patient.contacts.filter((c) => c.id !== id);
+    
+    // UI Update
+    setPatient((prev) => ({ ...prev, contacts: updatedContacts }));
+
+    // DB Update
+    const user = authService.getCurrentUser();
+    if (user) {
+      try {
+        await authService.updateUser(user.id, { contacts: updatedContacts });
+        console.log("✅ Contact removed from DB");
+      } catch (e) {
+        console.error("❌ Failed to remove contact:", e);
+      }
+    }
+  };
+
   const handleUpdateNutrition = async (newNutrition: NutritionState) => { setPatient((prev) => ({ ...prev, nutrition: newNutrition })); const user = authService.getCurrentUser(); if (user) await authService.updateUser(user.id, { nutrition: newNutrition }); };
 
   useEffect(() => {
