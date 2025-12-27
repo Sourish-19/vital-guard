@@ -58,19 +58,23 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         }
         
         // Combine country code and phone number for backend
-        const fullPhoneNumber = `${countryCode} ${formData.phoneNumber}`;
+        // Remove spaces to ensure clean format for Twilio (e.g. +15551234567)
+        const cleanNumber = formData.phoneNumber.replace(/\s/g, '');
+        const fullPhoneNumber = `${countryCode}${cleanNumber}`;
 
-        user = await authService.register(
-          formData.email, 
-          formData.password, 
-          formData.full_name, // Matches backend schema
-          parseInt(formData.age) || 0, // Send integer (0 if empty/optional)
-          fullPhoneNumber
-        );
+        // ✅ Updated: Calls 'signup' and passes a single object with snake_case keys
+        user = await authService.signup({
+          email: formData.email, 
+          password: formData.password, 
+          full_name: formData.full_name, 
+          age: parseInt(formData.age) || 0,
+          phone_number: fullPhoneNumber
+        });
       }
       
       onLogin(user);
     } catch (err: any) {
+      console.error(err);
       setError(err.message || "Authentication failed");
     } finally {
       setIsLoading(false);
