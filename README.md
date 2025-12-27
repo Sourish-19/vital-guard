@@ -1,249 +1,331 @@
-# Vitalgaurd
+# Vitalgaurd (SmartSOS)
 
-[![Project Status](https://img.shields.io/badge/status-active-brightgreen.svg)](#)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](#)
-[![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-orange.svg)](#)
+Predict. Prevent. Protect.
 
-> Vitalgaurd — A (placeholder) real-time vital-sign monitoring and alerting system for health / IoT applications.
+Vitalgaurd (branded in the UI as SmartSOS) is a full‑stack emergency‑response and health‑monitoring application that combines secure MongoDB-based authentication, an AI-powered conversational assistant using Google Generative AI, and SOS alerts delivered over WhatsApp via Twilio. The backend uses a modular routing and controller/service architecture to keep responsibilities clear and make the system easy to extend.
 
-IMPORTANT: This README is written to be polished and ready-to-use, but some repository-specific details (language, install commands, configuration keys, API endpoints) must be updated to reflect the actual code and structure in this repository.
+This README was updated to reflect the recent changes:
+- MongoDB (Mongoose) for signup & login
+- Google Generative AI (GoogleGenAI) as the chatbot backend
+- Twilio WhatsApp for SOS alerts
+- Improved modular routing and middleware layers
+
+Live UI screenshots (place the provided screenshots in the repository at the paths below so they render in this README):
+- Screenshot 1 (Homepage / Marketing Hero): assets/screenshots/1.png  
+  ![Image 1 — Homepage hero / marketing](/assets/screenshots/1.png)
+  *Caption: Marketing hero and sample health dashboard card.*
+- Screenshot 2 (Patient dashboard / live vitals): assets/screenshots/2.png  
+  ![Image 2 — Patient dashboard / live vitals](/assets/screenshots/2.png)
+  *Caption: Patient dashboard showing live vitals, wellness cards, and SOS button.*
+
+> Note: The images above correspond to the screenshots you provided. Add the files exactly at `assets/screenshots/1.png` and `assets/screenshots/2.png` (or update the paths below) to display them.
 
 Table of contents
-- [About](#about)
-- [Features](#features)
-- [Demo / Screenshots](#demo--screenshots)
-- [Tech stack](#tech-stack)
-- [Architecture](#architecture)
-- [Quick start](#quick-start)
-  - [Prerequisites](#prerequisites)
-  - [Clone](#clone)
-  - [Local setup (example)](#local-setup-example)
-  - [Running with Docker](#running-with-docker)
-- [Configuration](#configuration)
-- [Usage](#usage)
-  - [API examples](#api-examples)
-  - [CLI examples](#cli-examples)
-- [Testing](#testing)
-- [Deployment](#deployment)
-- [Contributing](#contributing)
-- [Roadmap](#roadmap)
-- [License](#license)
-- [Maintainers & Contact](#maintainers--contact)
-- [Acknowledgements](#acknowledgements)
-
-About
------
-Vitalgaurd (note: repository spelled "Vitalgaurd") is a system for collecting, visualizing and alerting on physiological vital signs (for example: heart rate, SpO2, temperature, blood pressure) from devices or simulated sources. It provides ingestion endpoints, a processing pipeline for anomaly detection and threshold-based alerts, and a dashboard to monitor live streams and patient histories.
-
-This README aims to be a complete guide for developers and operators. Replace placeholder sections below (especially Tech stack, example environment variables and commands) with the actual details from the repository.
+- Features
+- Tech stack
+- Architecture overview
+- Getting started
+  - Prerequisites
+  - Environment variables
+  - Local setup (backend & frontend)
+  - Docker (optional)
+- API reference (summary)
+  - Authentication
+  - Chat (GoogleGenAI)
+  - SOS Alerts (Twilio — WhatsApp)
+- Database models (high-level)
+- Routing & middleware
+- Security considerations
+- Testing
+- Deployment
+- Troubleshooting
+- Contributing
+- License
 
 Features
---------
-- Real-time ingestion of vital data (HTTP / MQTT / WebSocket) — adjust according to repo.
-- Persistent storage of time series per patient/device.
-- Threshold and anomaly-based alerting with configurable notification channels.
-- Web dashboard for live monitoring and historical trends.
-- Authentication and role-based access (optional — fill in if present).
-- Containerized for easy deployment.
-
-Demo / Screenshots
-------------------
-Add screenshots or a short demo GIF here, for example:
-
-![Dashboard screenshot](docs/images/dashboard.png)
+- Secure user signup/login backed by MongoDB (Mongoose)
+- JWT authentication with refresh token flow
+- Google Generative AI (GenAI) chatbot as a conversational assistant (server-side)
+- SOS dispatch via Twilio WhatsApp (one‑tap SOS + programmatic sends)
+- Improved modular routing, controllers, and services for separation of concerns
+- Alert audit trail persisted to DB (alerts collection)
+- Optional audit/logging for chat & alerts
 
 Tech stack
-----------
-Update this list to match the repository. Example:
+- Backend: Node.js, Express, Mongoose
+- Frontend: React (assumed) — update based on repo implementation
+- Database: MongoDB (Atlas or self-hosted)
+- Chat / AI: Google Generative AI (GenAI)
+- Notification: Twilio (WhatsApp)
+- Auth: bcrypt, JWT
+- Optional: Redis + BullMQ for background job queueing (recommended for large volumes)
 
-- Backend: Node.js (Express) or Python (FastAPI) — replace with actual
-- Database: PostgreSQL / TimescaleDB or MongoDB / InfluxDB
-- Message broker: MQTT / Redis / RabbitMQ (if used)
-- Frontend: React / Vue / Svelte
-- Containerization: Docker, Docker Compose
-- Optional: Kubernetes manifests for production
+Architecture overview
+- Frontend (React) <--> Backend (Express REST API)
+- Backend structure (recommended)
+  - routes/ — Express routers (authRouter, chatRouter, alertsRouter, userRouter, etc.)
+  - controllers/ — Accept HTTP requests and call services
+  - services/ — Business logic (AuthService, TwilioService, GenAIService)
+  - models/ — Mongoose models (User, Alert, ChatMessage)
+  - middleware/ — auth, validation, rate-limiter, error handler
+  - utils/ — helpers, logging, external API wrappers
 
-Architecture
-------------
-Describe the architecture here (or add a diagram in docs/architecture.png). Typical components:
-- Device / Simulator → Ingest API (HTTP / MQTT)
-- Processing workers (anomaly detection, enrichment)
-- Database (time-series / relational)
-- Notification service (email / SMS / webhook)
-- Frontend dashboard
-
-Quick start
------------
+Getting started
 
 Prerequisites
-- Git
-- Node.js >= 16 (if backend is Node) or Python >= 3.9 (if backend is Python) — replace as appropriate
-- Docker & Docker Compose (recommended)
-- A running database (Postgres / TimescaleDB) OR use Docker Compose to start one
+- Node.js 18+ (or tested LTS)
+- npm or yarn
+- MongoDB (Atlas recommended) or local instance
+- Twilio account with WhatsApp sandbox or approved WhatsApp sender
+- Google Cloud project with Generative AI API enabled (or GenAI access)
 
-Clone
-```bash
-git clone https://github.com/Sourish-19/Vitalgaurd.git
-cd Vitalgaurd
+Environment variables
+Create a `.env` file at the backend root. Example `.env.example` template:
+
+MONGODB
+```
+MONGODB_URI=mongodb+srv://<user>:<pass>@cluster0.mongodb.net/vitalgaurd?retryWrites=true&w=majority
 ```
 
-Local setup (example)
-Note: Replace commands with the actual repository commands.
+APP & AUTH
+```
+PORT=4000
+NODE_ENV=development
+FRONTEND_URL=http://localhost:3000
 
-1. Copy the example environment file and update values:
-```bash
-cp .env.example .env
-# Edit .env and set DB connection, secret keys, etc.
+JWT_SECRET=replace_with_a_long_random_string
+JWT_EXPIRES_IN=1h
+JWT_REFRESH_EXPIRES_IN=7d
 ```
 
-2. Install dependencies (example for Node.js):
-```bash
-npm install
-npm run build
-npm run start
+GOOGLE GENERATIVE AI
+```
+# Option A: API key
+GOOGLE_GENAI_API_KEY=your_google_genai_api_key
+
+# Option B (preferred for service accounts): use GOOGLE_APPLICATION_CREDENTIALS to point to a service account JSON file
+GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
 ```
 
-Or for Python (example):
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
+TWILIO
+```
+TWILIO_ACCOUNT_SID=ACXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+TWILIO_AUTH_TOKEN=your_auth_token
+TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
+SOS_RECIPIENTS=whatsapp:+1234567890,whatsapp:+1098765432
 ```
 
-Running with Docker
--------------------
-Start the app and necessary services with Docker Compose (if provided):
-```bash
-docker compose up --build
+OPTIONAL
 ```
-This will typically start the backend, frontend, and a database. Update compose file name if different (docker-compose.yml vs docker-compose.prod.yml).
+RATE_LIMIT_WINDOW_MS=60000
+RATE_LIMIT_MAX=100
+LOG_LEVEL=info
+```
 
-Configuration
--------------
-This project uses environment variables for configuration. Update `.env` with the following (examples — replace with actual variables from your repo):
+Local setup (backend & frontend)
+1. Clone
+   - git clone https://github.com/Sourish-19/Vitalgaurd.git
+   - cd Vitalgaurd
 
-- APP_ENV=development
-- APP_PORT=3000
-- DATABASE_URL=postgres://user:password@localhost:5432/vitalgaurd
-- JWT_SECRET=replace_with_real_secret
-- ALERT_WEBHOOK_URL=https://hooks.example.com/...
+2. Backend
+   - cd backend (or server — adjust if folder differs)
+   - cp .env.example .env (or create `.env`) and fill values
+   - npm install
+   - npm run dev  # starts dev server with nodemon
+   - npm run start  # production
 
-Be explicit in the repo about which variables are required and their default values. Provide `.env.example` in the repo.
+3. Frontend
+   - cd frontend
+   - npm install
+   - cp .env.example .env (if the frontend uses env vars)
+   - npm run start
 
-Usage
------
+Using Docker (optional)
+Example: start a local MongoDB container:
 
-API examples
-Replace the following examples with actual endpoints in the repository.
+docker-compose.yml (example snippet)
+```yaml
+version: "3.8"
+services:
+  mongo:
+    image: mongo:6
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    ports:
+      - "27017:27017"
 
-- Ingest a reading (HTTP POST)
-```http
-POST /api/v1/readings
-Content-Type: application/json
-Authorization: Bearer <token>
+volumes:
+  mongo-data:
+```
 
-{
-  "device_id": "device-123",
-  "patient_id": "patient-456",
-  "timestamp": "2025-12-23T12:34:56Z",
-  "metrics": {
-    "heart_rate": 75,
-    "spo2": 98,
-    "temperature": 36.7
-  }
+API reference (summary)
+Note: adapt paths to your implementation.
+
+Authentication
+- POST /api/auth/signup
+  - Body: { name, email, password, phone? }
+  - Response: { user: { id, name, email }, token, refreshToken }
+
+- POST /api/auth/signin
+  - Body: { email, password }
+  - Response: { user, token, refreshToken }
+
+- POST /api/auth/refresh
+  - Body: { refreshToken }
+  - Response: { token, refreshToken }
+
+- POST /api/auth/logout
+  - Body: { refreshToken } — invalidates refresh token
+
+Key notes:
+- Hash passwords with bcrypt before saving
+- Store refresh tokens (hashed) or maintain a allowlist/denylist depending on design
+
+Chatbot (Google Generative AI)
+- POST /api/chat
+  - Auth: Bearer token (recommended)
+  - Body: { message, sessionId? }
+  - Response: { reply, modelMetadata? }
+
+Example server-side pseudocode (Node.js)
+```js
+// genai.service.js - simplified
+const { GoogleAuth } = require('google-auth-library'); // or use official GenAI client
+async function generateReply(prompt) {
+  // call Google GenAI with API key or service account
+  // return reply string
 }
 ```
 
-- Query recent readings
-```http
-GET /api/v1/patients/patient-456/readings?limit=100
-Authorization: Bearer <token>
+Best practices:
+- Keep Google credentials server-side
+- If streaming responses, implement a streaming proxy to the client
+- Log chat interactions to ChatMessages collection for audit/analytics (if desired)
+
+SOS Alerts (Twilio WhatsApp)
+- POST /api/alerts/sos
+  - Auth: Bearer token
+  - Body: { message, location?: { lat, lng, address }, userId? }
+  - Response: { success: true, alertId, twilioResponses: [...] }
+
+Server flow:
+1. Validate request & user
+2. Persist Alert with status `queued`
+3. Use Twilio REST API to send WhatsApp messages to recipients configured in SOS_RECIPIENTS
+4. Update Alert with delivery result(s) and timestamps
+
+Example Node.js snippet (twilio)
+```js
+const twilioClient = require('twilio')(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
+
+async function sendWhatsApp(recipient, body) {
+  return twilioClient.messages.create({
+    from: process.env.TWILIO_WHATSAPP_FROM, // e.g. "whatsapp:+14155238886"
+    to: recipient, // e.g. "whatsapp:+1234567890"
+    body,
+  });
+}
 ```
 
-CLI examples
-If the repo includes CLI tools, provide usage:
-```bash
-# simulate device data
-node tools/simulator.js --device device-123 --rate 1
-```
+Database models (high-level)
+- User
+  - _id, name, email, passwordHash, phone, roles, createdAt, lastSeen
+
+- Alert
+  - _id, userId, message, location, status (queued|sent|failed), recipients[], twilioResponses[], createdAt, updatedAt
+
+- ChatMessage (optional)
+  - _id, userId, sessionId, userMessage, botReply, model, metadata, createdAt
+
+Routing & middleware
+- Use small routers per domain: authRouter, userRouter, chatRouter, alertsRouter
+- Controllers should be thin: parse request → call services → format response
+- Services encapsulate business logic and external API calls (TwilioService, GenAIService)
+- Middleware:
+  - validation (AJV, Joi, or express-validator)
+  - authentication (JWT verification)
+  - rate-limiter (express-rate-limit)
+  - error handler (centralized)
+  - request logging (morgan or custom)
+
+Security considerations
+- Do not commit .env or credentials to the repo
+- Use HTTPS in production and configure CORS origins to only trusted frontends
+- Rate-limit sensitive endpoints (auth, chat, sos)
+- Use strong, rotated API keys and service account credentials for Google & Twilio
+- Sanitize inputs to prevent injection attacks
+- Consider hashed/rotating refresh tokens for user sessions
+- Limit Twilio recipients and validate numbers before sending
 
 Testing
--------
-Describe test commands and coverage:
-
-- Run unit tests:
-```bash
-npm test
-# or
-pytest
-```
-
-- Run linting / formatting:
-```bash
-npm run lint
-npm run format
-```
+- Unit tests for services (mock external APIs)
+- Integration tests against a test MongoDB (mongodb-memory-server recommended)
+- Mock Twilio & GenAI in CI to avoid real external calls
+- End-to-end (optional) to cover signup → auth → chat → SOS send flows (with mocks)
 
 Deployment
-----------
-Provide recommended deployment steps. Example using Docker:
-1. Build container:
-```bash
-docker build -t sourish/vitalgaurd:latest .
-```
-2. Push to registry and deploy to your environment (Kubernetes / Docker Swarm / VM).
-3. Use environment-specific compose files or Helm charts for production.
+- Backend: deploy to Heroku, Render, Vercel (serverless), AWS, GCP, or DigitalOcean
+- Frontend: deploy to Vercel, Netlify, or any static host
+- Use managed MongoDB Atlas for production
+- Set secrets using your host's secret manager (do not store in repository)
+- For heavy SOS usage, offload deliveries to a background queue and worker processes
+
+Troubleshooting
+- MongoDB connection errors: verify MONGODB_URI and network whitelist (Atlas)
+- Twilio errors: check Twilio console for error codes and ensure WhatsApp sandbox/approved sender is configured
+- Google GenAI errors: ensure API enabled and credentials valid
+- Token issues: verify JWT_SECRET and token expiry configuration match across services
+- If Twilio messages fail silently, log Twilio response error objects to investigate
 
 Contributing
-------------
-We welcome contributions! A suggested contributing flow:
+- Fork repository → create feature branch → open PR
+- Follow repo linting and formatting rules
+- Write tests for new features (mock external services)
+- Use branch naming: feat/<short-desc>, fix/<issue>-<short-desc>
 
-1. Fork the repo.
-2. Create a feature branch: `git checkout -b feat/your-feature`
-3. Implement changes and add tests.
-4. Run tests and linting locally.
-5. Open a Pull Request describing your changes.
+Repository structure (recommended)
+```
+/backend
+  /controllers
+  /services
+  /models
+  /routes
+  /middleware
+  app.js
+/frontend
+  src/
+  public/
+  ...
+/assets/screenshots/1.png
+/assets/screenshots/2.png
+README.md
+```
 
-Please ensure:
-- Code follows the repository’s style and lint rules.
-- Tests are added or updated for significant behavior changes.
-- Update README and docs for any user-facing changes.
+Operational recommendations & next steps
+- Add background job queue for bulk/async SOS (BullMQ + Redis)
+- Add observability: Sentry for errors, Prometheus/Grafana for metrics
+- Implement RBAC (roles: user, responder, admin) if needed
+- Add E2E test suite that mocks Twilio and GenAI
+- Add rate limiting & abuse detection on SOS endpoint to avoid spam
 
-Consider adding a CONTRIBUTING.md and CODE_OF_CONDUCT.md to the repo.
+Acknowledgements & links
+- Twilio WhatsApp: https://www.twilio.com/whatsapp
+- Google Generative AI: https://cloud.google.com/generative-ai
+- MongoDB Atlas: https://www.mongodb.com/cloud/atlas
 
-Roadmap
--------
-- [ ] Core ingestion and storage (complete)
-- [ ] Dashboard and visualizations
-- [ ] Advanced anomaly detection (ML)
-- [ ] Notification integrations (SMS, email, webhooks)
-- [ ] Multi-tenant support
-- [ ] HIPAA / data protection guidance (if applicable)
+Maintainer / Contact
+- Repository: https://github.com/Sourish-19/Vitalgaurd
+- Maintainer: Sourish-19
 
 License
--------
-This project is licensed under the MIT License — see the LICENSE file for details. Replace this with the license used by the repository.
+- Add your preferred license (e.g., MIT). Update the LICENSE file accordingly.
 
-Maintainers & Contact
----------------------
-- Maintainer: Sourish-19 (GitHub: https://github.com/Sourish-19)
-- For questions or issues, open an issue in the repository.
+Changelog (summary of the latest update)
+- Implemented MongoDB for user signup & login (Mongoose)
+- Integrated Google Generative AI for the chatbot
+- Integrated Twilio WhatsApp for SOS alerting
+- Reworked routing into modular routers and services
+- Added audit-persistent alerts and basic logging for SOS flows
 
-Acknowledgements
-----------------
-- Thanks to all contributors and the open-source community.
-- List any libraries, tools or references used.
-
-Appendix — Checklist to finalize this README
---------------------------------------------
-Please update these repository-specific items before publishing:
-- [ ] Correct repository name spelling if different (Vitalgaurd vs Vitalguard).
-- [ ] Replace Tech stack with actual languages and frameworks used.
-- [ ] Replace all example commands with repository-specific commands.
-- [ ] Add real screenshots / demo links.
-- [ ] Add instructions for any required credentials or external services.
-- [ ] Add LICENSE file if missing.
-
-If you want, I can:
-- Produce a README that exactly matches the code in the repository (I can scan the repo and fill in concrete commands, tech stack, env variables and examples). Would you like me to do that now?
+ 

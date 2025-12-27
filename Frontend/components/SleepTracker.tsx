@@ -71,10 +71,10 @@ const SleepTracker: React.FC<SleepTrackerProps> = ({ patient }) => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div>
         
         {/* HERO: Sleep Score */}
-        <div className="lg:col-span-2 bg-gradient-to-br from-[#1e1b4b] to-[#312e81] rounded-[2.5rem] p-8 text-white shadow-2xl relative overflow-hidden flex flex-col md:flex-row items-center justify-between min-h-[300px]">
+        <div className="bg-gradient-to-br from-[#1e1b4b] to-[#312e81] rounded-[2.5rem] p-8 text-white shadow-2xl relative overflow-hidden flex flex-col md:flex-row items-center justify-between min-h-[300px]">
            {/* Stars Background */}
            <div className="absolute inset-0 opacity-30">
               <div className="absolute top-10 left-10 w-1 h-1 bg-white rounded-full animate-pulse"></div>
@@ -129,7 +129,7 @@ const SleepTracker: React.FC<SleepTrackerProps> = ({ patient }) => {
         </div>
 
         {/* Weekly Trend */}
-        <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col">
+        {/* <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col">
            <h3 className="font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
               <Calendar size={20} className="text-indigo-500" />
               Weekly History
@@ -154,7 +154,7 @@ const SleepTracker: React.FC<SleepTrackerProps> = ({ patient }) => {
               <span className="text-slate-500 dark:text-slate-400">Avg. Duration</span>
               <span className="font-bold text-slate-900 dark:text-white">7h 05m</span>
            </div>
-        </div>
+        </div> */}
       </div>
 
       {/* Sleep Stages Breakdown */}

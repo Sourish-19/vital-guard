@@ -114,6 +114,20 @@ class EmergencyContact(BaseModel):
     phone: str
     isPrimary: bool = False
 
+# ✅ NEW: Model for ADDING a contact (No ID required, backend generates it)
+class ContactCreate(BaseModel):
+    name: str
+    relation: str
+    phone: str
+    isPrimary: bool = False
+
+# ✅ NEW: Model for UPDATING a contact
+class ContactUpdate(BaseModel):
+    name: Optional[str] = None
+    relation: Optional[str] = None
+    phone: Optional[str] = None
+    isPrimary: Optional[bool] = None
+
 class UserSignup(BaseModel):
     full_name: str
     email: EmailStr
@@ -372,6 +386,88 @@ def send_whatsapp_alert(alert: AlertRequest):
         # Return 500 so frontend knows it failed
         raise HTTPException(status_code=500, detail=str(e))
 
+import uuid # Add this import at the top
+
+# ==========================================
+# 6. DEDICATED CONTACT ROUTES
+# ==========================================
+
+# 🟢 CREATE: Add a new contact
+@app.post("/users/me/contacts", response_model=List[EmergencyContact])
+async def add_contact(contact: ContactCreate, current_user: dict = Depends(get_current_user)):
+    database = await get_database()
+    
+    # 1. Clean the phone number (Remove spaces/dashes)
+    clean_phone = contact.phone.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
+    
+    # 2. Create the new contact object
+    new_contact_entry = {
+        "id": str(uuid.uuid4()), # Generate unique ID
+        "name": contact.name,
+        "relation": contact.relation,
+        "phone": clean_phone,
+        "isPrimary": contact.isPrimary
+    }
+
+    # 3. Push to MongoDB
+    await database[USER_COLLECTION].update_one(
+        {"_id": current_user["_id"]},
+        {"$push": {"contacts": new_contact_entry}}
+    )
+
+    # 4. Return updated list
+    updated_user = await database[USER_COLLECTION].find_one({"_id": current_user["_id"]})
+    return updated_user.get("contacts", [])
+
+
+# 🔵 READ: Get all contacts
+@app.get("/users/me/contacts", response_model=List[EmergencyContact])
+async def get_contacts(current_user: dict = Depends(get_current_user)):
+    return current_user.get("contacts", [])
+
+
+# 🟡 UPDATE: Edit a specific contact
+@app.put("/users/me/contacts/{contact_id}", response_model=List[EmergencyContact])
+async def update_contact(contact_id: str, update: ContactUpdate, current_user: dict = Depends(get_current_user)):
+    database = await get_database()
+    
+    # Build update dictionary dynamically
+    update_fields = {}
+    if update.name is not None: update_fields["contacts.$.name"] = update.name
+    if update.relation is not None: update_fields["contacts.$.relation"] = update.relation
+    if update.isPrimary is not None: update_fields["contacts.$.isPrimary"] = update.isPrimary
+    if update.phone is not None:
+        update_fields["contacts.$.phone"] = update.phone.replace(" ", "").replace("-", "")
+
+    if not update_fields:
+        raise HTTPException(status_code=400, detail="No fields provided for update")
+
+    # Update specific item in array where id matches
+    result = await database[USER_COLLECTION].update_one(
+        {"_id": current_user["_id"], "contacts.id": contact_id},
+        {"$set": update_fields}
+    )
+
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Contact not found")
+
+    updated_user = await database[USER_COLLECTION].find_one({"_id": current_user["_id"]})
+    return updated_user.get("contacts", [])
+
+
+# 🔴 DELETE: Remove a contact
+@app.delete("/users/me/contacts/{contact_id}", response_model=List[EmergencyContact])
+async def delete_contact(contact_id: str, current_user: dict = Depends(get_current_user)):
+    database = await get_database()
+
+    # Pull (remove) the item from the array where id matches
+    await database[USER_COLLECTION].update_one(
+        {"_id": current_user["_id"]},
+        {"$pull": {"contacts": {"id": contact_id}}}
+    )
+
+    updated_user = await database[USER_COLLECTION].find_one({"_id": current_user["_id"]})
+    return updated_user.get("contacts", [])
 
 if __name__ == "__main__":
     import uvicorn

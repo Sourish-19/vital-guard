@@ -1,26 +1,18 @@
-import { NutritionState } from '../types';
+import axios from 'axios';
+import { EmergencyContact, NutritionState } from '../types';
 
-// ==========================================
-// 1. Interfaces & Configuration
-// ==========================================
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export interface User {
   id: string;
+  full_name: string;
   email: string;
-  full_name: string;    // Matches Backend Pydantic
-  phone_number: string; // Matches Backend Pydantic
+  phone_number: string;
   age?: number;
-  telegramBotToken?: string;
-  telegramChatId?: string;
-  contacts?: EmergencyContact[]
+  contacts?: EmergencyContact[];
   nutrition?: NutritionState;
+  token?: string; 
 }
-
-// Change this if your backend is running on a different port/URL
-const API_URL = import.meta.env.VITE_API_URL; 
-
-const TOKEN_KEY = 'smartsos_token';
-const USER_KEY = 'smartsos_user';
 
 const DEFAULT_NUTRITION: NutritionState = {
   isConfigured: false,
@@ -35,168 +27,94 @@ const DEFAULT_NUTRITION: NutritionState = {
   waterIntake: 0
 };
 
-// ==========================================
-// 2. Auth Service
-// ==========================================
-
 export const authService = {
 
   /**
-   * Initialize: Check if a token exists and validate it against the backend.
+   * Login: 
+   * 1. Posts credentials to /login
+   * 2. Saves ONLY Token to LocalStorage
+   * 3. Fetches & Returns User Profile (Memory Only)
    */
-  async init() {
-    const token = localStorage.getItem(TOKEN_KEY);
-    if (token) {
-      try {
-        await this.fetchCurrentUser(token);
-      } catch (e) {
-        console.warn("Auto-login failed:", e);
-        this.logout();
-      }
+  login: async (email: string, password: string): Promise<User> => {
+    try {
+      // 1. Get Token
+      const loginResp = await axios.post(`${API_URL}/login`, { email, password });
+      const token = loginResp.data.access_token;
+
+      if (!token) throw new Error("No access token received");
+
+      // 2. Save Token Only
+      localStorage.setItem('token', token);
+
+      // 3. Fetch User Details
+      const userResp = await axios.get(`${API_URL}/users/me`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      const backendUser = userResp.data;
+
+      // 4. Return Object (Do NOT save 'user' to localStorage)
+      return {
+        id: backendUser.id,
+        full_name: backendUser.full_name,
+        email: backendUser.email,
+        phone_number: backendUser.phone_number,
+        age: backendUser.age,
+        contacts: backendUser.contacts || [],
+        nutrition: backendUser.nutrition || DEFAULT_NUTRITION,
+        token: token
+      };
+
+    } catch (error: any) {
+      console.error("Login Error:", error.response?.data || error.message);
+      throw new Error(error.response?.data?.detail || 'Login failed');
     }
   },
 
   /**
-   * Login: Hits POST /login
+   * Register: Creates account and auto-logs in
    */
-  async login(email: string, password: string): Promise<User> {
-    const response = await fetch(`${API_URL}/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || 'Login failed');
+  signup: async (userData: any): Promise<User> => {
+    try {
+      await axios.post(`${API_URL}/signup`, userData);
+      return await authService.login(userData.email, userData.password);
+    } catch (error: any) {
+      console.error("Signup Error:", error.response?.data || error.message);
+      throw new Error(error.response?.data?.detail || 'Registration failed');
     }
-
-    const data = await response.json();
-    const token = data.access_token;
-
-    // Save token and fetch full user details
-    localStorage.setItem(TOKEN_KEY, token);
-    return await this.fetchCurrentUser(token);
   },
 
   /**
-   * Register: Hits POST /signup
+   * Get Raw Token from Storage
    */
-  async register(email: string, password: string, full_name: string, age: number, phone_number: string): Promise<User> {
-    const response = await fetch(`${API_URL}/signup`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email,
-        password,
-        full_name,
-        age,
-        phone_number
-      }),
-    });
+  getToken: (): string | null => {
+    return localStorage.getItem('token') || localStorage.getItem('smartsos_token');
+  },
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || 'Registration failed');
+  /**
+   * Update User Profile (PUT /users/me)
+   */
+  updateUser: async (updates: Partial<User>) => {
+    const token = authService.getToken();
+    if (!token) throw new Error("No auth token found");
+
+    try {
+      const response = await axios.put(`${API_URL}/users/me`, updates, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return response.data;
+    } catch (error: any) {
+      console.error("Update Error:", error);
+      throw error;
     }
-
-    // Auto-login after successful registration
-    return await this.login(email, password);
   },
 
   /**
-   * Logout: Clears local storage
+   * Logout: Clears token
    */
-  logout() {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
-    window.location.href = '/'; 
-  },
-
-  /**
-   * Fetch User: Hits GET /users/me using the JWT token
-   */
-  async fetchCurrentUser(token: string): Promise<User> {
-    const response = await fetch(`${API_URL}/users/me`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch user details');
-    }
-
-    const userData = await response.json();
-
-    // Map backend response to frontend User object
-    const user: User = {
-      id: userData.id,
-      email: userData.email,
-      full_name: userData.full_name,
-      phone_number: userData.phone_number,
-      age: userData.age,
-      nutrition: DEFAULT_NUTRITION // Default value since backend doesn't persist this yet
-    };
-
-    localStorage.setItem(USER_KEY, JSON.stringify(user));
-    return user;
-  },
-
-  /**
-   * Helper: Get currently stored user (Synchronous)
-   */
-  getCurrentUser(): User | null {
-    const userStr = localStorage.getItem(USER_KEY);
-    return userStr ? JSON.parse(userStr) : null;
-  },
-
-  /**
-   * Helper: Get raw JWT token
-   */
-  getToken(): string | null {
-    return localStorage.getItem(TOKEN_KEY);
-  },
-
-  /**
-   * Update User: Hits PUT /users/me to persist changes to MongoDB
-   */
-  async updateUser(userId: string, updates: Partial<User>): Promise<User> {
-    const token = this.getToken();
-    if (!token) throw new Error("No token found");
-
-    // 1. Call the Backend to update database
-    const response = await fetch(`${API_URL}/users/me`, {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(updates),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || 'Failed to update profile');
-    }
-
-    // 2. Get the updated user data returned from the backend
-    const updatedBackendData = await response.json();
-
-    // 3. Merge with local state 
-    // (We merge to preserve fields like 'nutrition' which might not be in the backend response yet)
-    const currentUser = this.getCurrentUser();
-    const mergedUser: User = { 
-        ...currentUser!, // Assert existing user is not null
-        ...updatedBackendData, 
-        nutrition: currentUser?.nutrition || DEFAULT_NUTRITION
-    };
-    
-    // 4. Update Local Storage so the UI reflects changes immediately
-    localStorage.setItem(USER_KEY, JSON.stringify(mergedUser));
-    
-    return mergedUser;
+  logout: () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('smartsos_token');
+    localStorage.removeItem('user'); // Cleanup legacy data if any
   }
 };

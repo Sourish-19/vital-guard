@@ -77,13 +77,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     }
   };
 
-  // Pre-fill for demo convenience if empty
-  React.useEffect(() => {
-    if (isLogin && !formData.email) {
-      setFormData(prev => ({...prev, email: 'margaret@example.com', password: ''}));
-    }
-  }, [isLogin]);
-
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-4 font-sans transition-colors duration-200">
       {/* Logo & Header */}

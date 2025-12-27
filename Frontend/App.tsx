@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
+import axios from "axios"; 
 import {
   Menu,
   Mic,
@@ -11,7 +12,6 @@ import {
 
 import { generateHealthInsight } from "./services/geminiService";
 import { authService, User } from "./services/authService";
-// ✅ Make sure this file exists in src/services/
 import { sendWhatsAppAlert } from "./services/whatsappService"; 
 
 import Sidebar from "./components/Sidebar";
@@ -19,7 +19,7 @@ import Dashboard from "./components/Dashboard";
 import VitalsTrends from "./components/VitalsTrends";
 import Medications from "./components/Medications";
 import EmergencyLog from "./components/EmergencyLog";
-import Settings from "./components/Settings";
+import Settings, { SettingsProfile, SettingsContacts, SettingsDevice } from "./components/Settings";
 import HealthTips from "./components/HealthTips";
 import NutritionTracker from "./components/NutritionTracker";
 import StepsTracker from "./components/StepsTracker";
@@ -42,7 +42,7 @@ import {
   NutritionState,
 } from "./types";
 
-// ---------- Helpers & Constants ----------
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 const generateStepHistory = () => {
   const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -55,125 +55,23 @@ const generateStepHistory = () => {
 };
 
 const INITIAL_PATIENT: PatientState = {
-  id: "PT-89234",
+  id: "GUEST",
   full_name: "Guest User",
-  age: 65,
+  age: 0,
   phone_number: "",
-  telegramBotToken: "",
-  telegramChatId: "",
   status: AlertLevel.STABLE,
-  location: {
-    lat: 34.0522,
-    lng: -118.2437,
-    address: "142 Oak Street, Springfield",
-  },
-  heartRate: {
-    value: 72,
-    unit: "BPM",
-    label: "Heart Rate",
-    trend: "stable",
-    lastUpdated: "Now",
-    history: Array.from({ length: 20 }, (_, i) => ({
-      time: `${i}:00`,
-      value: 70 + Math.random() * 5,
-    })),
-  },
-  bloodPressure: {
-    systolic: 118,
-    diastolic: 76,
-    history: Array.from({ length: 20 }, (_, i) => ({
-      time: `${i}:00`,
-      systolic: 115 + Math.random() * 10,
-      diastolic: 75 + Math.random() * 5,
-    })),
-  },
-  oxygenLevel: {
-    value: 98,
-    unit: "%",
-    label: "SpO2",
-    trend: "stable",
-    lastUpdated: "Now",
-    history: [],
-  },
-  temperature: {
-    value: 98.6,
-    unit: "°F",
-    label: "Temperature",
-    trend: "stable",
-    lastUpdated: "Now",
-    history: Array.from({ length: 20 }, (_, i) => ({
-      time: `${i}:00`,
-      value: 98.4 + Math.random() * 0.5,
-    })),
-  },
-  steps: {
-    value: 4250,
-    unit: "steps",
-    label: "Steps",
-    trend: "up",
-    lastUpdated: "Now",
-    history: [],
-  },
+  location: { lat: 34.0522, lng: -118.2437, address: "Loading Location..." },
+  heartRate: { value: 72, unit: "BPM", label: "Heart Rate", trend: "stable", lastUpdated: "Now", history: [] },
+  bloodPressure: { systolic: 120, diastolic: 80, history: [] },
+  oxygenLevel: { value: 98, unit: "%", label: "SpO2", trend: "stable", lastUpdated: "Now", history: [] },
+  temperature: { value: 98.6, unit: "°F", label: "Temperature", trend: "stable", lastUpdated: "Now", history: [] },
+  steps: { value: 0, unit: "steps", label: "Steps", trend: "up", lastUpdated: "Now", history: [] },
   dailyStepGoal: 6000,
-  stepPoints: 1250,
+  stepPoints: 0,
   stepHistory: generateStepHistory(),
-  sleep: {
-    score: 85,
-    duration: "7h 12m",
-    bedTime: "10:30 PM",
-    wakeTime: "06:45 AM",
-    stages: { deep: 18, light: 58, rem: 22, awake: 2 },
-    history: [
-      { day: "Sun", hours: 6.5, score: 72 },
-      { day: "Mon", hours: 7.2, score: 85 },
-      { day: "Tue", hours: 6.8, score: 78 },
-      { day: "Wed", hours: 7.5, score: 88 },
-      { day: "Thu", hours: 7.0, score: 82 },
-      { day: "Fri", hours: 5.5, score: 60 },
-      { day: "Sat", hours: 8.0, score: 92 },
-    ],
-  },
-  nutrition: {
-    isConfigured: false,
-    weight: 0,
-    height: 0,
-    goal: "maintain",
-    activityLevel: "light",
-    dailyCalorieTarget: 2000,
-    caloriesConsumed: 0,
-    macros: { protein: 0, carbs: 0, fats: 0 },
-    meals: { breakfast: [], lunch: [], dinner: [], snack: [] },
-    waterIntake: 0,
-  },
-  medications: [
-    {
-      id: "1",
-      name: "Lisinopril",
-      dosage: "10mg",
-      time: "08:00",
-      taken: true,
-      type: "pill",
-      reminderSent: false,
-    },
-    {
-      id: "2",
-      name: "Metformin",
-      dosage: "500mg",
-      time: "12:00",
-      taken: false,
-      type: "pill",
-      reminderSent: false,
-    },
-    {
-      id: "3",
-      name: "Aspirin",
-      dosage: "81mg",
-      time: "21:00",
-      taken: false,
-      type: "pill",
-      reminderSent: false,
-    },
-  ],
+  sleep: { score: 85, duration: "7h", bedTime: "10pm", wakeTime: "6am", stages: {deep:0, light:0, rem:0, awake:0}, history: [] },
+  nutrition: { isConfigured: false, weight: 0, height: 0, goal: "maintain", activityLevel: "light", dailyCalorieTarget: 2000, caloriesConsumed: 0, macros: {protein:0, carbs:0, fats:0}, meals: {breakfast:[], lunch:[], dinner:[], snack:[]}, waterIntake: 0 },
+  medications: [],
   logs: [],
   contacts: [],
 };
@@ -184,7 +82,8 @@ function App() {
 
   // --- States ---
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [isAuthChecking, setIsAuthChecking] = useState(true); // Controls initial loader
+  
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [patient, setPatient] = useState<PatientState>(INITIAL_PATIENT);
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('smartsos_theme') === 'dark');
@@ -196,13 +95,11 @@ function App() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotificationPanel, setShowNotificationPanel] = useState(false);
 
-  // --- Refs ---
   const patientRef = useRef<PatientState>(patient);
   const audioContextRef = useRef<AudioContext | null>(null);
 
   useEffect(() => { patientRef.current = patient; }, [patient]);
 
-  // --- Theme Effect ---
   useEffect(() => {
     if (typeof document === "undefined") return;
     if (isDarkMode) {
@@ -214,35 +111,67 @@ function App() {
     }
   }, [isDarkMode]);
 
-  // --- Auth Init ---
+  // =========================================================
+  // ✅ AUTH INITIALIZATION: FETCH USER ON LOAD
+  // =========================================================
   useEffect(() => {
     const initAuth = async () => {
+      // 1. Check for token
+      const token = authService.getToken();
+
+      // 2. If NO token, stop loading, show Landing/Login
+      if (!token) {
+        setIsAuthChecking(false);
+        return; 
+      }
+
+      // 3. If Token exists, FETCH user data
       try {
-        const user = authService.getCurrentUser();
-        if (user) {
-          handleLoginSuccess(user);
-          if (location.pathname === '/' || location.pathname === '/login') {
+        console.log("🔄 Fetching fresh profile...");
+        const response = await axios.get(`${API_URL}/users/me`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+
+        const userData = response.data;
+
+        // 4. Update State with fresh data
+        setPatient((prev) => ({
+            ...prev,
+            id: userData.id,
+            full_name: userData.full_name,
+            age: userData.age,
+            phone_number: userData.phone_number,
+            contacts: userData.contacts || [],
+            nutrition: userData.nutrition || prev.nutrition,
+        }));
+
+        setIsAuthenticated(true);
+        
+        if (location.pathname === '/' || location.pathname === '/login') {
             navigate('/dashboard');
-          }
         }
-      } catch (e) {
-        console.error("Auth init error", e);
+
+      } catch (error) {
+        console.error("❌ Session expired:", error);
+        authService.logout();
+        setIsAuthenticated(false);
       } finally {
-        setIsAuthReady(true);
+        setIsAuthChecking(false); // Stop loading
       }
     };
+
     initAuth();
   }, []);
 
-  // ✅ UPDATED: Loads contacts from DB on login
   const handleLoginSuccess = (user: User) => {
+    // Auth.tsx calls this with the user object returned by authService.login()
     setPatient((prev) => ({
       ...prev,
       id: user.id || prev.id,
       full_name: user.full_name,
       age: user.age || prev.age,
       phone_number: user.phone_number,
-      contacts: user.contacts || [], // Load from DB
+      contacts: user.contacts || [],
       nutrition: user.nutrition || prev.nutrition,
     }));
     setIsAuthenticated(true);
@@ -251,10 +180,11 @@ function App() {
   const handleLogout = () => {
     authService.logout();
     setIsAuthenticated(false);
+    setPatient(INITIAL_PATIENT);
     navigate('/');
   };
 
-  // --- Helpers (Notifications, Audio, API) ---
+  // --- Helpers ---
   const addNotification = (type: NotificationType, title: string, message: string) => {
     const newNotif: Notification = { id: Date.now().toString() + Math.random(), type, title, message, timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) };
     setNotifications((prev) => [newNotif, ...prev]);
@@ -290,29 +220,21 @@ function App() {
     osc.stop(ctx.currentTime + duration);
   };
 
-  // ✅ UPDATED: Sends WhatsApp Alert using Phone Number
-  // ✅ UPDATED: Send Alerts to ALL Saved Contacts
   const notifyCaregiver = async (message: string) => {
     const currentPatient = patientRef.current;
     const contacts = currentPatient.contacts;
 
-    // 1. Validation: Do we have contacts?
     if (!contacts || contacts.length === 0) {
         addNotification("system", "No Contacts", "Please add emergency contacts in Settings.");
-        console.warn("❌ No emergency contacts found.");
         return;
     }
 
     addNotification("whatsapp", "Sending Alerts", `Notifying ${contacts.length} contact(s)...`);
 
-    // 2. Loop through every contact and send the message
-    // We use Promise.all to send them in parallel (faster)
     const results = await Promise.all(
         contacts.map(async (contact) => {
             if (!contact.phone) return { name: contact.name, status: "skipped" };
-
             try {
-                // Send the alert to this specific contact's phone
                 const success = await sendWhatsAppAlert(contact.phone, message);
                 return { name: contact.name, status: success ? "sent" : "failed" };
             } catch (error) {
@@ -322,7 +244,6 @@ function App() {
         })
     );
 
-    // 3. Log results
     const sentCount = results.filter(r => r.status === "sent").length;
     if (sentCount > 0) {
         addNotification("whatsapp", "Alerts Sent", `Successfully alerted ${sentCount} contact(s).`);
@@ -406,29 +327,49 @@ function App() {
     return () => clearInterval(complianceInterval);
   }, [isAuthenticated]);
 
-  // Vitals Simulation Loop
+// Vitals Simulation Loop
   useEffect(() => {
     if (!isAuthenticated) return;
-    if (location.pathname === '/settings') return; // STOP SIMULATION ON SETTINGS
+    if (location.pathname === '/settings') return; 
 
     const interval = setInterval(() => {
       setPatient((prev) => {
         const isCritical = prev.status === AlertLevel.CRITICAL;
+        
+        // Random Value Generation
         const newHr = isCritical ? 130 + Math.random() * 40 : 72 + (Math.random() * 4 - 2);
         const newSys = isCritical ? 160 + Math.random() * 20 : 118 + (Math.random() * 6 - 3);
         const newTemp = 98.6 + (Math.random() * 0.8 - 0.4);
         const stepInc = Math.random() > 0.6 ? Math.floor(Math.random() * 8) + 2 : 0;
+        
         let newPoints = prev.stepPoints;
         if (prev.steps.value + stepInc >= prev.dailyStepGoal && prev.steps.value < prev.dailyStepGoal) {
           newPoints += 50;
           addNotification("system", "Daily Goal Reached!", `You've hit ${prev.dailyStepGoal} steps. +50 pts!`);
         }
+
         const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
         return {
           ...prev,
-          heartRate: { ...prev.heartRate, value: Math.floor(newHr), history: [...prev.heartRate.history.slice(1), { time: timestamp, value: newHr }] },
-          bloodPressure: { ...prev.bloodPressure, systolic: Math.floor(newSys), history: [...prev.bloodPressure.history.slice(1), { time: timestamp, systolic: newSys, diastolic: prev.bloodPressure.diastolic }] },
-          temperature: { ...prev.temperature, value: newTemp, history: [...prev.temperature.history.slice(1), { time: timestamp, value: newTemp }] },
+          heartRate: { 
+            ...prev.heartRate, 
+            value: Math.floor(newHr), 
+            // ✅ FIX 1: Add to history, THEN slice the last 20 items
+            history: [...prev.heartRate.history, { time: timestamp, value: newHr }].slice(-20) 
+          },
+          bloodPressure: { 
+            ...prev.bloodPressure, 
+            systolic: Math.floor(newSys), 
+            // ✅ FIX 2: Same fix for BP
+            history: [...prev.bloodPressure.history, { time: timestamp, systolic: newSys, diastolic: prev.bloodPressure.diastolic }].slice(-20) 
+          },
+          temperature: { 
+            ...prev.temperature, 
+            value: newTemp, 
+            // ✅ FIX 3: Same fix for Temp
+            history: [...prev.temperature.history, { time: timestamp, value: newTemp }].slice(-20) 
+          },
           steps: { ...prev.steps, value: prev.steps.value + stepInc },
           stepPoints: newPoints,
         };
@@ -437,7 +378,7 @@ function App() {
     return () => clearInterval(interval);
   }, [isAuthenticated, location.pathname]);
 
-  // --- Event Handlers ---
+  // --- Handlers ---
   const handleUpdateStepGoal = (newGoal: number) => { setPatient((prev) => ({ ...prev, dailyStepGoal: newGoal })); addNotification("system", "Goal Updated", `Daily step target set to ${newGoal.toLocaleString()}`); };
   
   const handleManualSOS = (type: "cardiac" | "fall" = "cardiac") => {
@@ -447,7 +388,6 @@ function App() {
     setShowSOSModal(true);
     setSosCountdown(10);
     speak(type === "fall" ? "Fall detected. Calling emergency contacts." : "Warning. Heart rate anomaly detected.");
-    // WhatsApp Alert
     notifyCaregiver(`🚨 *SOS EMERGENCY ALERT* 🚨\n\nPatient: ${patientRef.current.full_name}\nStatus: CRITICAL\nLocation: ${patientRef.current.location.address}`);
     setTimeout(() => fetchInsight({ ...patientRef.current, status: AlertLevel.CRITICAL }), 1000);
   };
@@ -463,19 +403,16 @@ function App() {
     speak("System test initiated.");
   };
 
-  // ✅ UPDATED: Manual WhatsApp Test
   const handleNotificationTest = async () => {
     if (!patient.phone_number) {
         addNotification("system", "Missing Phone Number", "Please set a phone number in settings first.");
         return;
     }
-
     addNotification("whatsapp", "WhatsApp Alert", "Sending test message via Twilio...");
     const success = await sendWhatsAppAlert(
         patient.phone_number, 
         "🏥 *SmartSOS Test Message*\n\nYour notification system is working correctly."
     );
-    
     if (success) { 
         speak("Test message sent."); 
         addNotification("whatsapp", "WhatsApp Alert", "Success! Check your WhatsApp."); 
@@ -498,55 +435,55 @@ function App() {
   
   const handleUpdateProfile = async (updates: Partial<PatientState>) => {
     setPatient((prev) => ({ ...prev, ...updates }));
-    const user = authService.getCurrentUser();
-    if (!user) return;
-    const userUpdates: Partial<User> = {};
-    if (updates.full_name) userUpdates.full_name = updates.full_name;
-    if (updates.age) userUpdates.age = updates.age;
-    if (updates.phone_number) userUpdates.phone_number = updates.phone_number;
-    if (Object.keys(userUpdates).length > 0) await authService.updateUser(user.id, userUpdates);
+    const token = authService.getToken();
+    if (token) {
+        try {
+            await authService.updateUser(updates);
+        } catch(e) {
+            console.error("Profile sync error:", e);
+        }
+    }
   };
 
-  // ✅ UPDATED: Add Contact with DB Sync
   const handleAddContact = async (contact: Omit<EmergencyContact, "id">) => {
-    const newContact = { ...contact, id: Date.now().toString() };
-    const updatedContacts = [...patient.contacts, newContact];
-    
-    // UI Update
-    setPatient((prev) => ({ ...prev, contacts: updatedContacts }));
+    const token = authService.getToken(); 
+    if (!token) return;
 
-    // DB Update
-    const user = authService.getCurrentUser();
-    if (user) {
-      try {
-        await authService.updateUser(user.id, { contacts: updatedContacts });
-        console.log("✅ Contact saved to DB");
-      } catch (e) {
-        console.error("❌ Failed to save contact:", e);
-      }
+    try {
+      const response = await axios.post(`${API_URL}/users/me/contacts`, contact, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setPatient((prev) => ({ ...prev, contacts: response.data }));
+      console.log("✅ Contact added via API");
+    } catch (e) {
+      console.error("❌ Failed to add contact:", e);
+      throw e; 
     }
   };
 
-  // ✅ UPDATED: Remove Contact with DB Sync
   const handleRemoveContact = async (id: string) => {
-    const updatedContacts = patient.contacts.filter((c) => c.id !== id);
-    
-    // UI Update
-    setPatient((prev) => ({ ...prev, contacts: updatedContacts }));
+    const token = authService.getToken(); 
+    if (!token) return;
 
-    // DB Update
-    const user = authService.getCurrentUser();
-    if (user) {
-      try {
-        await authService.updateUser(user.id, { contacts: updatedContacts });
-        console.log("✅ Contact removed from DB");
-      } catch (e) {
-        console.error("❌ Failed to remove contact:", e);
-      }
+    try {
+      const response = await axios.delete(`${API_URL}/users/me/contacts/${id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setPatient((prev) => ({ ...prev, contacts: response.data }));
+      console.log("✅ Contact deleted via API");
+    } catch (e) {
+      console.error("❌ Failed to remove contact:", e);
+      throw e;
     }
   };
 
-  const handleUpdateNutrition = async (newNutrition: NutritionState) => { setPatient((prev) => ({ ...prev, nutrition: newNutrition })); const user = authService.getCurrentUser(); if (user) await authService.updateUser(user.id, { nutrition: newNutrition }); };
+  const handleUpdateNutrition = async (newNutrition: NutritionState) => { 
+      setPatient((prev) => ({ ...prev, nutrition: newNutrition })); 
+      const token = authService.getToken();
+      if (token) {
+          await axios.put(`${API_URL}/users/me`, {nutrition: newNutrition}, {headers: {Authorization: `Bearer ${token}`}}); 
+      }
+  };
 
   useEffect(() => {
     if (!showSOSModal) return;
@@ -557,15 +494,15 @@ function App() {
     return () => clearTimeout(timer);
   }, [showSOSModal, sosCountdown]);
 
-  // Determine if we are on a public page (no sidebar/header)
   const isPublicPage = location.pathname === '/' || location.pathname === '/login';
 
-  if (!isAuthReady) {
+  // ✅ LOADING STATE (Shows while checking token validity)
+  if (isAuthChecking) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-slate-50 dark:bg-slate-950">
         <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Loading SmartSOS...</p>
+          <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
+          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Loading your profile...</p>
         </div>
       </div>
     );
@@ -660,7 +597,33 @@ function App() {
               <Route path="/nutrition" element={isAuthenticated ? <NutritionTracker patient={patient} onUpdateNutrition={handleUpdateNutrition} /> : <Navigate to="/login" />} />
               <Route path="/steps" element={isAuthenticated ? <StepsTracker patient={patient} onUpdateGoal={handleUpdateStepGoal} /> : <Navigate to="/login" />} />
               <Route path="/sleep" element={isAuthenticated ? <SleepTracker patient={patient} /> : <Navigate to="/login" />} />
-              <Route path="/settings" element={isAuthenticated ? <Settings patient={patient} onUpdateProfile={handleUpdateProfile} onAddContact={handleAddContact} onRemoveContact={handleRemoveContact} onTestAlarm={handleSystemTest} onTestWhatsApp={handleNotificationTest} /> : <Navigate to="/login" />} />
+              <Route path="/settings" element={
+                  isAuthenticated ? 
+                  <Settings patient={patient} onTestAlarm={handleSystemTest} /> 
+                  : <Navigate to="/login" />
+              }>
+                  {/* Default redirect to profile */}
+                  <Route index element={<Navigate to="profile" replace />} />
+                  
+                  <Route path="profile" element={
+                      <SettingsProfile patient={patient} onUpdateProfile={handleUpdateProfile} />
+                  } />
+                  
+                  <Route path="contacts" element={
+                      <SettingsContacts 
+                          patient={patient} 
+                          onAddContact={handleAddContact} 
+                          onRemoveContact={handleRemoveContact} 
+                      />
+                  } />
+                  
+                  <Route path="device" element={
+                      <SettingsDevice 
+                          patient={patient} 
+                          onTestWhatsApp={handleNotificationTest} 
+                      />
+                  } />
+              </Route>
               
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>

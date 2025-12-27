@@ -1,20 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { User, Phone, Shield, Volume2, Plus, Trash2, Save, Activity, Smartphone, MapPin, Send, HelpCircle, MessageCircle } from 'lucide-react';
+import { 
+  User, Phone, Shield, Volume2, Plus, Trash2, Save, 
+  Activity, Smartphone, MapPin, Send, HelpCircle, MessageCircle, Loader2 
+} from 'lucide-react';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { PatientState, EmergencyContact } from '../types';
 
-interface SettingsProps {
+// ==========================================
+// 1. SUB-COMPONENT: PROFILE SETTINGS
+// ==========================================
+interface ProfileProps {
   patient: PatientState;
   onUpdateProfile: (updates: Partial<PatientState>) => void;
-  onAddContact: (contact: Omit<EmergencyContact, 'id'>) => void;
-  onRemoveContact: (id: string) => void;
-  onTestAlarm: () => void;
-  onTestWhatsApp: () => void;
 }
 
-const Settings: React.FC<SettingsProps> = ({ patient, onUpdateProfile, onAddContact, onRemoveContact, onTestAlarm, onTestWhatsApp }) => {
-  const [activeTab, setActiveTab] = useState<'profile' | 'contacts' | 'device'>('profile');
-  
-  // --- Profile Form State ---
+export const SettingsProfile: React.FC<ProfileProps> = ({ patient, onUpdateProfile }) => {
   const [profileForm, setProfileForm] = useState({
     full_name: patient.full_name || '',
     age: patient.age || 0,
@@ -22,23 +22,17 @@ const Settings: React.FC<SettingsProps> = ({ patient, onUpdateProfile, onAddCont
     address: patient.location?.address || ''
   });
 
-  // --- THE FIX: Smart Sync ---
-  // This useEffect ONLY runs when Name, Age, Phone, or Address changes.
-  // It completely IGNORES Heart Rate/Vitals updates, so it won't "spam" or reset your form.
+  // Smart Sync
   useEffect(() => {
     setProfileForm(prev => {
-      // 1. Check if the incoming data is actually different from what we have
       if (
         prev.full_name === (patient.full_name || '') &&
         prev.age === (patient.age || 0) &&
         prev.phone_number === (patient.phone_number || '') &&
         prev.address === (patient.location?.address || '')
       ) {
-        // Data is the same? Do nothing. This prevents the "Spam" and cursor reset.
         return prev;
       }
-
-      // 2. Only update if data actually changed (e.g. loaded from backend)
       return {
         full_name: patient.full_name || '',
         age: patient.age || 0,
@@ -48,15 +42,6 @@ const Settings: React.FC<SettingsProps> = ({ patient, onUpdateProfile, onAddCont
     });
   }, [patient.full_name, patient.age, patient.phone_number, patient.location?.address]);
 
-  // --- Alarm Volume State ---
-  const [volume, setVolume] = useState(80);
-
-  // --- Contact Form State ---
-  const [isAddingContact, setIsAddingContact] = useState(false);
-  const [newContact, setNewContact] = useState({ name: '', relation: '', phone: '', isPrimary: false });
-
-  // --- Handlers ---
-
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
     onUpdateProfile({
@@ -65,18 +50,331 @@ const Settings: React.FC<SettingsProps> = ({ patient, onUpdateProfile, onAddCont
       age: Number(profileForm.age),
       location: { ...patient.location, address: profileForm.address }
     });
-    alert("Profile updated successfully!");
+    alert("Profile saved successfully.");
   };
 
-  const handleAddContactSubmit = (e: React.FormEvent) => {
+  return (
+    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-8 animate-in fade-in duration-300">
+      <div className="flex items-center space-x-3 mb-8 pb-4 border-b border-slate-100 dark:border-slate-700">
+        <div className="bg-blue-600 p-2.5 rounded-xl text-white shadow-blue-200 dark:shadow-none shadow-lg"><User size={24}/></div>
+        <div>
+          <h3 className="text-xl font-bold text-slate-900 dark:text-white">Patient Information</h3>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Update your personal details</p>
+        </div>
+      </div>
+      
+      <form onSubmit={handleSaveProfile} className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="md:col-span-2">
+            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 ml-1">Full Name</label>
+            <input 
+              type="text" 
+              value={profileForm.full_name}
+              onChange={(e) => setProfileForm({...profileForm, full_name: e.target.value})}
+              className="w-full p-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold rounded-xl focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900 focus:border-blue-600 dark:focus:border-blue-500 outline-none transition-all shadow-sm text-lg placeholder:text-slate-300 dark:placeholder:text-slate-600"
+              placeholder="e.g. Margaret Thompson"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 ml-1">Phone Number (WhatsApp)</label>
+            <input 
+              type="tel" 
+              value={profileForm.phone_number}
+              onChange={(e) => setProfileForm({...profileForm, phone_number: e.target.value})}
+              placeholder="+91..."
+              className="w-full p-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold rounded-xl focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900 focus:border-blue-600 dark:focus:border-blue-500 outline-none transition-all shadow-sm text-lg"
+            />
+            <p className="text-xs text-slate-400 mt-1 ml-1">Must include country code (e.g., +91)</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 ml-1">Age</label>
+            <input 
+              type="number" 
+              value={profileForm.age}
+              onChange={(e) => setProfileForm({...profileForm, age: Number(e.target.value)})}
+              className="w-full p-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold rounded-xl focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900 focus:border-blue-600 dark:focus:border-blue-500 outline-none transition-all shadow-sm text-lg"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 ml-1">Home Address</label>
+          <div className="relative">
+            <MapPin className="absolute top-4 left-4 text-slate-400" size={20} />
+            <textarea 
+              rows={3}
+              value={profileForm.address}
+              onChange={(e) => setProfileForm({...profileForm, address: e.target.value})}
+              className="w-full pl-12 p-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold rounded-xl focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900 focus:border-blue-600 dark:focus:border-blue-500 outline-none transition-all shadow-sm text-lg resize-none leading-relaxed"
+            />
+          </div>
+          <p className="text-xs text-slate-400 mt-2 ml-1">This address is shared with emergency services during an SOS.</p>
+        </div>
+
+        <div className="pt-6 flex justify-end">
+            <button type="submit" className="flex items-center space-x-2 bg-slate-900 dark:bg-blue-600 text-white px-8 py-3.5 rounded-xl hover:bg-black dark:hover:bg-blue-700 transition-all shadow-lg active:scale-95 font-bold text-lg">
+              <Save size={20} />
+              <span>Save Changes</span>
+            </button>
+        </div>
+      </form>
+    </div>
+  );
+};
+
+// ==========================================
+// 2. SUB-COMPONENT: CONTACT SETTINGS
+// ==========================================
+interface ContactsProps {
+  patient: PatientState;
+  onAddContact: (contact: Omit<EmergencyContact, 'id'>) => Promise<void>;
+  onRemoveContact: (id: string) => Promise<void>;
+}
+
+export const SettingsContacts: React.FC<ContactsProps> = ({ patient, onAddContact, onRemoveContact }) => {
+  const [isAddingContact, setIsAddingContact] = useState(false);
+  const [isSubmittingContact, setIsSubmittingContact] = useState(false);
+  const [deletingContactId, setDeletingContactId] = useState<string | null>(null);
+  const [newContact, setNewContact] = useState({ name: '', relation: '', phone: '', isPrimary: false });
+
+  const handleAddContactSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newContact.name && newContact.phone) {
-      onAddContact(newContact);
+    if (!newContact.name || !newContact.phone) return;
+
+    try {
+      setIsSubmittingContact(true);
+      await onAddContact(newContact);
       setNewContact({ name: '', relation: '', phone: '', isPrimary: false });
       setIsAddingContact(false);
+    } catch (error) {
+      console.error("Failed to add contact", error);
+      alert("Failed to save contact. Please check your connection.");
+    } finally {
+      setIsSubmittingContact(false);
     }
   };
 
+  const handleRemoveClick = async (id: string) => {
+    try {
+      setDeletingContactId(id);
+      await onRemoveContact(id);
+    } catch (error) {
+      console.error("Failed to remove contact", error);
+    } finally {
+      setDeletingContactId(null);
+    }
+  };
+
+  return (
+    <div className="space-y-4 animate-in fade-in duration-300">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
+        <div className="flex justify-between items-center mb-6">
+          <div className="flex items-center space-x-3">
+            <div className="bg-emerald-100 dark:bg-emerald-900/30 p-2 rounded-lg text-emerald-600 dark:text-emerald-400"><Phone size={24}/></div>
+            <div>
+              <h3 className="text-lg font-bold text-slate-800 dark:text-white">Emergency Contacts</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400">People notified during SOS alerts.</p>
+            </div>
+          </div>
+          <button 
+            onClick={() => setIsAddingContact(!isAddingContact)}
+            className="flex items-center space-x-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-4 py-2 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 font-medium transition-colors"
+          >
+            <Plus size={18} />
+            <span>{isAddingContact ? 'Cancel' : 'Add Contact'}</span>
+          </button>
+        </div>
+
+        {isAddingContact && (
+            <form onSubmit={handleAddContactSubmit} className="bg-slate-50 dark:bg-slate-900 p-6 rounded-2xl mb-6 border border-slate-200 dark:border-slate-700 animate-in slide-in-from-top-2">
+              <h4 className="font-bold text-slate-800 dark:text-white mb-4">New Contact Details</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <input 
+                  placeholder="Name" 
+                  required
+                  value={newContact.name}
+                  onChange={e => setNewContact({...newContact, name: e.target.value})}
+                  className="p-3 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:border-emerald-500 outline-none"
+                />
+                <input 
+                  placeholder="Relation (e.g. Son)" 
+                  required
+                  value={newContact.relation}
+                  onChange={e => setNewContact({...newContact, relation: e.target.value})}
+                  className="p-3 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:border-emerald-500 outline-none"
+                />
+                <input 
+                  placeholder="Phone (e.g. +91...)" 
+                  required
+                  value={newContact.phone}
+                  onChange={e => setNewContact({...newContact, phone: e.target.value})}
+                  className="p-3 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:border-emerald-500 outline-none"
+                />
+              </div>
+              <div className="flex justify-end">
+                <button 
+                  type="submit" 
+                  disabled={isSubmittingContact}
+                  className="bg-emerald-600 text-white px-6 py-2.5 rounded-xl text-sm font-bold hover:bg-emerald-700 shadow-md flex items-center gap-2 disabled:opacity-50"
+                >
+                  {isSubmittingContact ? <Loader2 className="animate-spin" size={16}/> : null}
+                  {isSubmittingContact ? 'Saving...' : 'Save Contact'}
+                </button>
+              </div>
+            </form>
+        )}
+
+        <div className="space-y-3">
+          {patient.contacts && patient.contacts.length > 0 ? patient.contacts.map(contact => (
+            <div key={contact.id} className="flex items-center justify-between p-4 border border-slate-100 dark:border-slate-700 rounded-xl hover:shadow-md transition-all group bg-white dark:bg-slate-800">
+                <div className="flex items-center space-x-4">
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg ${contact.isPrimary ? 'bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>
+                    {contact.name.charAt(0)}
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-800 dark:text-white flex items-center gap-2 text-lg">
+                      {contact.name}
+                      {contact.isPrimary && <span className="text-[10px] bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 px-2 py-0.5 rounded-full uppercase tracking-wide">Primary</span>}
+                    </p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">{contact.relation} • {contact.phone}</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => handleRemoveClick(contact.id)} 
+                  disabled={deletingContactId === contact.id}
+                  className="p-2 text-slate-300 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {deletingContactId === contact.id ? <Loader2 className="animate-spin text-rose-500" size={20}/> : <Trash2 size={20} />}
+                </button>
+            </div>
+          )) : (
+            <p className="text-center text-slate-400 py-8 italic">No contacts added yet.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+// 3. SUB-COMPONENT: DEVICE SETTINGS
+// ==========================================
+interface DeviceProps {
+  patient: PatientState;
+  onTestWhatsApp: () => void;
+}
+
+export const SettingsDevice: React.FC<DeviceProps> = ({ patient, onTestWhatsApp }) => {
+  const [volume, setVolume] = useState(80);
+
+  return (
+    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-8 animate-in fade-in duration-300">
+      <div className="flex items-center space-x-3 mb-8 pb-4 border-b border-slate-100 dark:border-slate-700">
+        <div className="bg-purple-100 dark:bg-purple-900/30 p-2 rounded-lg text-purple-600 dark:text-purple-400"><Smartphone size={24}/></div>
+        <div>
+           <h3 className="text-xl font-bold text-slate-900 dark:text-white">Device Preferences</h3>
+           <p className="text-sm text-slate-500 dark:text-slate-400">Configure your alert settings</p>
+        </div>
+      </div>
+
+      <div className="space-y-8">
+        
+        {/* WhatsApp/Twilio Configuration */}
+        <div className="bg-emerald-50 dark:bg-emerald-900/20 p-5 rounded-xl border border-emerald-100 dark:border-emerald-800">
+          <div className="flex items-center space-x-3 mb-4">
+              <div className="bg-[#25D366] p-2 rounded-lg text-white"><MessageCircle size={20} /></div>
+              <h4 className="font-bold text-slate-900 dark:text-white">WhatsApp Alerts (Twilio Sandbox)</h4>
+          </div>
+          
+          <div className="bg-white dark:bg-slate-900 p-4 rounded-lg flex items-start gap-3 mb-6 shadow-sm">
+            <HelpCircle size={18} className="text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
+            <div className="text-xs text-slate-600 dark:text-slate-300 space-y-2">
+               <p className="font-bold text-emerald-700 dark:text-emerald-400">Required: Join the Sandbox</p>
+               <p>To receive WhatsApp alerts on the free plan, each contact MUST verify their number:</p>
+               <ol className="list-decimal ml-4 space-y-1.5 mt-2">
+                 <li>
+                   Open WhatsApp on your phone.
+                 </li>
+                 <li>
+                   Send the code <code className="bg-slate-100 dark:bg-slate-700 px-1 py-0.5 rounded border border-slate-300 dark:border-slate-600 font-mono text-emerald-600">join [your-sandbox-code]</code> to <b className="text-slate-900 dark:text-white">+1 415 523 8886</b>.
+                 </li>
+                 <li>
+                   <i>(Refresh the 24-hour session window by sending any message to the bot daily).</i>
+                 </li>
+               </ol>
+            </div>
+          </div>
+
+          <div className="flex justify-between items-center mt-4">
+              <div className="text-xs text-slate-400 italic">
+                Alerts will be sent to: <b>{patient.phone_number || "No number set"}</b>
+              </div>
+              <button 
+                onClick={onTestWhatsApp}
+                disabled={!patient.phone_number}
+                className="px-4 py-2 bg-[#25D366] text-white font-bold rounded-lg hover:bg-[#20bd5a] transition-colors text-sm shadow-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Send size={14} />
+                Test WhatsApp Alert
+              </button>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-700 pt-6">
+            <div className="flex items-center space-x-4">
+              <div className="bg-slate-50 dark:bg-slate-700 p-3 rounded-xl"><Volume2 size={24} className="text-slate-700 dark:text-slate-300"/></div>
+              <div>
+                <p className="font-bold text-slate-900 dark:text-white text-lg">Alarm Volume</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Volume level for SOS siren</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <input 
+                type="range" 
+                min="0" 
+                max="100" 
+                value={volume} 
+                onChange={(e) => setVolume(Number(e.target.value))}
+                className="w-40 h-2 bg-slate-200 dark:bg-slate-600 rounded-lg appearance-none cursor-pointer"
+                style={{
+                  background: `linear-gradient(to right, #2563eb 0%, #2563eb ${volume}%, #e2e8f0 ${volume}%, #e2e8f0 100%)`
+                }}
+              />
+              <span className="text-sm font-bold text-blue-600 w-8">{volume}%</span>
+            </div>
+        </div>
+
+        <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="bg-slate-50 dark:bg-slate-700 p-3 rounded-xl"><Shield size={24} className="text-slate-700 dark:text-slate-300"/></div>
+              <div>
+                <p className="font-bold text-slate-900 dark:text-white text-lg">Fall Detection</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Adjust AI motion sensor threshold</p>
+              </div>
+            </div>
+            <select className="bg-white dark:bg-slate-700 border-2 border-slate-200 dark:border-slate-600 rounded-xl text-sm font-bold p-3 outline-none focus:border-blue-500 text-slate-700 dark:text-white">
+              <option>High Sensitivity</option>
+              <option>Medium Sensitivity</option>
+              <option>Low Sensitivity</option>
+            </select>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
+// ==========================================
+// 4. MAIN LAYOUT: SETTINGS
+// ==========================================
+interface SettingsLayoutProps {
+  patient: PatientState;
+  onTestAlarm: () => void;
+}
+
+const Settings: React.FC<SettingsLayoutProps> = ({ patient, onTestAlarm }) => {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* Header */}
@@ -85,286 +383,50 @@ const Settings: React.FC<SettingsProps> = ({ patient, onUpdateProfile, onAddCont
           <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Settings & Configuration</h2>
           <p className="text-slate-500 dark:text-slate-400">Manage patient profile, emergency contacts, and device preferences.</p>
         </div>
+        
+        {/* Navigation Tabs */}
         <div className="flex space-x-1 bg-white dark:bg-slate-800 p-1 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
-          {['profile', 'contacts', 'device'].map((tab) => (
-            <button 
-              key={tab}
-              onClick={() => setActiveTab(tab as any)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${activeTab === tab ? 'bg-blue-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}`}
-            >
-              {tab === 'device' ? 'Device & System' : tab}
-            </button>
-          ))}
+          <NavLink 
+            to="/settings/profile" 
+            className={({ isActive }) => `px-4 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${isActive ? 'bg-blue-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}`}
+          >
+            Profile
+          </NavLink>
+          <NavLink 
+            to="/settings/contacts" 
+            className={({ isActive }) => `px-4 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${isActive ? 'bg-blue-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}`}
+          >
+            Contacts
+          </NavLink>
+          <NavLink 
+            to="/settings/device" 
+            className={({ isActive }) => `px-4 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${isActive ? 'bg-blue-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}`}
+          >
+            Device & System
+          </NavLink>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* Left Column: Main Content */}
+        {/* Left Column: Dynamic Content via Outlet */}
         <div className="lg:col-span-2 space-y-6">
-          
-          {/* PROFILE TAB */}
-          {activeTab === 'profile' && (
-            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-8">
-              <div className="flex items-center space-x-3 mb-8 pb-4 border-b border-slate-100 dark:border-slate-700">
-                <div className="bg-blue-600 p-2.5 rounded-xl text-white shadow-blue-200 dark:shadow-none shadow-lg"><User size={24}/></div>
-                <div>
-                  <h3 className="text-xl font-bold text-slate-900 dark:text-white">Patient Information</h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">Update your personal details</p>
-                </div>
-              </div>
-              
-              <form onSubmit={handleSaveProfile} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 ml-1">Full Name</label>
-                    <input 
-                      type="text" 
-                      value={profileForm.full_name}
-                      onChange={(e) => setProfileForm({...profileForm, full_name: e.target.value})}
-                      className="w-full p-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold rounded-xl focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900 focus:border-blue-600 dark:focus:border-blue-500 outline-none transition-all shadow-sm text-lg placeholder:text-slate-300 dark:placeholder:text-slate-600"
-                      placeholder="e.g. Margaret Thompson"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 ml-1">Phone Number (WhatsApp)</label>
-                    <input 
-                      type="tel" 
-                      value={profileForm.phone_number}
-                      onChange={(e) => setProfileForm({...profileForm, phone_number: e.target.value})}
-                      placeholder="+91..."
-                      className="w-full p-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold rounded-xl focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900 focus:border-blue-600 dark:focus:border-blue-500 outline-none transition-all shadow-sm text-lg"
-                    />
-                    <p className="text-xs text-slate-400 mt-1 ml-1">Must include country code (e.g., +91)</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 ml-1">Age</label>
-                    <input 
-                      type="number" 
-                      value={profileForm.age}
-                      onChange={(e) => setProfileForm({...profileForm, age: Number(e.target.value)})}
-                      className="w-full p-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold rounded-xl focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900 focus:border-blue-600 dark:focus:border-blue-500 outline-none transition-all shadow-sm text-lg"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 ml-1">Home Address</label>
-                  <div className="relative">
-                    <MapPin className="absolute top-4 left-4 text-slate-400" size={20} />
-                    <textarea 
-                      rows={3}
-                      value={profileForm.address}
-                      onChange={(e) => setProfileForm({...profileForm, address: e.target.value})}
-                      className="w-full pl-12 p-4 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold rounded-xl focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900 focus:border-blue-600 dark:focus:border-blue-500 outline-none transition-all shadow-sm text-lg resize-none leading-relaxed"
-                    />
-                  </div>
-                  <p className="text-xs text-slate-400 mt-2 ml-1">This address is shared with emergency services during an SOS.</p>
-                </div>
-
-                <div className="pt-6 flex justify-end">
-                    <button type="submit" className="flex items-center space-x-2 bg-slate-900 dark:bg-blue-600 text-white px-8 py-3.5 rounded-xl hover:bg-black dark:hover:bg-blue-700 transition-all shadow-lg active:scale-95 font-bold text-lg">
-                      <Save size={20} />
-                      <span>Save Changes</span>
-                    </button>
-                </div>
-              </form>
-            </div>
-          )}
-
-          {/* CONTACTS TAB */}
-          {activeTab === 'contacts' && (
-            <div className="space-y-4">
-              <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
-                <div className="flex justify-between items-center mb-6">
-                  <div className="flex items-center space-x-3">
-                    <div className="bg-emerald-100 dark:bg-emerald-900/30 p-2 rounded-lg text-emerald-600 dark:text-emerald-400"><Phone size={24}/></div>
-                    <div>
-                      <h3 className="text-lg font-bold text-slate-800 dark:text-white">Emergency Contacts</h3>
-                      <p className="text-sm text-slate-500 dark:text-slate-400">People notified during SOS alerts.</p>
-                    </div>
-                  </div>
-                  <button 
-                    onClick={() => setIsAddingContact(!isAddingContact)}
-                    className="flex items-center space-x-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-4 py-2 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 font-medium transition-colors"
-                  >
-                    <Plus size={18} />
-                    <span>{isAddingContact ? 'Cancel' : 'Add Contact'}</span>
-                  </button>
-                </div>
-
-                {isAddingContact && (
-                    <form onSubmit={handleAddContactSubmit} className="bg-slate-50 dark:bg-slate-900 p-6 rounded-2xl mb-6 border border-slate-200 dark:border-slate-700 animate-in slide-in-from-top-2">
-                      <h4 className="font-bold text-slate-800 dark:text-white mb-4">New Contact Details</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                        <input 
-                          placeholder="Name" 
-                          required
-                          value={newContact.name}
-                          onChange={e => setNewContact({...newContact, name: e.target.value})}
-                          className="p-3 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:border-emerald-500 outline-none"
-                        />
-                        <input 
-                          placeholder="Relation (e.g. Son)" 
-                          required
-                          value={newContact.relation}
-                          onChange={e => setNewContact({...newContact, relation: e.target.value})}
-                          className="p-3 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:border-emerald-500 outline-none"
-                        />
-                        <input 
-                          placeholder="Phone Number" 
-                          required
-                          value={newContact.phone}
-                          onChange={e => setNewContact({...newContact, phone: e.target.value})}
-                          className="p-3 rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:border-emerald-500 outline-none"
-                        />
-                      </div>
-                      <div className="flex justify-end">
-                        <button type="submit" className="bg-emerald-600 text-white px-6 py-2.5 rounded-xl text-sm font-bold hover:bg-emerald-700 shadow-md">Save Contact</button>
-                      </div>
-                    </form>
-                )}
-
-                <div className="space-y-3">
-                  {patient.contacts && patient.contacts.length > 0 ? patient.contacts.map(contact => (
-                    <div key={contact.id} className="flex items-center justify-between p-4 border border-slate-100 dark:border-slate-700 rounded-xl hover:shadow-md transition-all group bg-white dark:bg-slate-800">
-                        <div className="flex items-center space-x-4">
-                          <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg ${contact.isPrimary ? 'bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>
-                            {contact.name.charAt(0)}
-                          </div>
-                          <div>
-                            <p className="font-bold text-slate-800 dark:text-white flex items-center gap-2 text-lg">
-                              {contact.name}
-                              {contact.isPrimary && <span className="text-[10px] bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 px-2 py-0.5 rounded-full uppercase tracking-wide">Primary</span>}
-                            </p>
-                            <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">{contact.relation} • {contact.phone}</p>
-                          </div>
-                        </div>
-                        <button onClick={() => onRemoveContact(contact.id)} className="p-2 text-slate-300 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-colors">
-                          <Trash2 size={20} />
-                        </button>
-                    </div>
-                  )) : (
-                    <p className="text-center text-slate-400 py-8 italic">No contacts added yet.</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* DEVICE TAB */}
-          {activeTab === 'device' && (
-            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-8">
-              <div className="flex items-center space-x-3 mb-8 pb-4 border-b border-slate-100 dark:border-slate-700">
-                <div className="bg-purple-100 dark:bg-purple-900/30 p-2 rounded-lg text-purple-600 dark:text-purple-400"><Smartphone size={24}/></div>
-                <div>
-                   <h3 className="text-xl font-bold text-slate-900 dark:text-white">Device Preferences</h3>
-                   <p className="text-sm text-slate-500 dark:text-slate-400">Configure your alert settings</p>
-                </div>
-              </div>
-
-              <div className="space-y-8">
-                
-                {/* WhatsApp/Twilio Configuration */}
-                <div className="bg-emerald-50 dark:bg-emerald-900/20 p-5 rounded-xl border border-emerald-100 dark:border-emerald-800">
-                  <div className="flex items-center space-x-3 mb-4">
-                      <div className="bg-[#25D366] p-2 rounded-lg text-white"><MessageCircle size={20} /></div>
-                      <h4 className="font-bold text-slate-900 dark:text-white">WhatsApp Alerts (Twilio Sandbox)</h4>
-                  </div>
-                  
-                  <div className="bg-white dark:bg-slate-900 p-4 rounded-lg flex items-start gap-3 mb-6 shadow-sm">
-                    <HelpCircle size={18} className="text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
-                    <div className="text-xs text-slate-600 dark:text-slate-300 space-y-2">
-                       <p className="font-bold text-emerald-700 dark:text-emerald-400">Required: Join the Sandbox</p>
-                       <p>Because we are using the free Twilio API, you <b>must</b> verify your phone number to receive alerts.</p>
-                       <ol className="list-decimal ml-4 space-y-1.5 mt-2">
-                         <li>
-                           Open WhatsApp on your phone.
-                         </li>
-                         <li>
-                           Send the code <code className="bg-slate-100 dark:bg-slate-700 px-1 py-0.5 rounded border border-slate-300 dark:border-slate-600 font-mono text-emerald-600">join your-sandbox-code</code> to <b className="text-slate-900 dark:text-white">+1 415 523 8886</b>.
-                         </li>
-                         <li>
-                           <i>(Note: Check your Twilio Console for your specific join code).</i>
-                         </li>
-                       </ol>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-between items-center mt-4">
-                      <div className="text-xs text-slate-400 italic">
-                        Alerts will be sent to: <b>{profileForm.phone_number || "No number set"}</b>
-                      </div>
-                      <button 
-                        onClick={onTestWhatsApp}
-                        disabled={!profileForm.phone_number}
-                        className="px-4 py-2 bg-[#25D366] text-white font-bold rounded-lg hover:bg-[#20bd5a] transition-colors text-sm shadow-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <Send size={14} />
-                        Test WhatsApp Alert
-                      </button>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-700 pt-6">
-                    <div className="flex items-center space-x-4">
-                      <div className="bg-slate-50 dark:bg-slate-700 p-3 rounded-xl"><Volume2 size={24} className="text-slate-700 dark:text-slate-300"/></div>
-                      <div>
-                        <p className="font-bold text-slate-900 dark:text-white text-lg">Alarm Volume</p>
-                        <p className="text-sm text-slate-500 dark:text-slate-400">Volume level for SOS siren</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <input 
-                        type="range" 
-                        min="0" 
-                        max="100" 
-                        value={volume} 
-                        onChange={(e) => setVolume(Number(e.target.value))}
-                        className="w-40 h-2 bg-slate-200 dark:bg-slate-600 rounded-lg appearance-none cursor-pointer"
-                        style={{
-                          background: `linear-gradient(to right, #2563eb 0%, #2563eb ${volume}%, #e2e8f0 ${volume}%, #e2e8f0 100%)`
-                        }}
-                      />
-                      <span className="text-sm font-bold text-blue-600 w-8">{volume}%</span>
-                    </div>
-                </div>
-
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                      <div className="bg-slate-50 dark:bg-slate-700 p-3 rounded-xl"><Shield size={24} className="text-slate-700 dark:text-slate-300"/></div>
-                      <div>
-                        <p className="font-bold text-slate-900 dark:text-white text-lg">Fall Detection</p>
-                        <p className="text-sm text-slate-500 dark:text-slate-400">Adjust AI motion sensor threshold</p>
-                      </div>
-                    </div>
-                    <select className="bg-white dark:bg-slate-700 border-2 border-slate-200 dark:border-slate-600 rounded-xl text-sm font-bold p-3 outline-none focus:border-blue-500 text-slate-700 dark:text-white">
-                      <option>High Sensitivity</option>
-                      <option>Medium Sensitivity</option>
-                      <option>Low Sensitivity</option>
-                    </select>
-                </div>
-              </div>
-            </div>
-          )}
+          <Outlet />
         </div>
 
-        {/* Right Column: Status & Test */}
+        {/* Right Column: Static Status & Test */}
         <div className="space-y-6">
            {/* Account Summary */}
            <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 text-center">
-              <div className="w-32 h-32 mx-auto bg-slate-100 dark:bg-slate-700 rounded-full mb-6 overflow-hidden border-4 border-white dark:border-slate-600 shadow-xl">
+             <div className="w-32 h-32 mx-auto bg-slate-100 dark:bg-slate-700 rounded-full mb-6 overflow-hidden border-4 border-white dark:border-slate-600 shadow-xl">
                  <img src="https://picsum.photos/200" alt="Profile" className="w-full h-full object-cover" />
-              </div>
-              {/* Uses full_name from backend props */}
-              <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-1">{patient.full_name}</h3>
-              <p className="text-slate-500 dark:text-slate-400 font-medium mb-6">ID: {patient.id}</p>
-              <div className="flex justify-center space-x-3">
+             </div>
+             <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-1">{patient.full_name}</h3>
+             <p className="text-slate-500 dark:text-slate-400 font-medium mb-6">ID: {patient.id}</p>
+             <div className="flex justify-center space-x-3">
                  <span className="bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-300 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide">Premium</span>
                  <span className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-300 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide">Verified</span>
-              </div>
+             </div>
            </div>
 
            {/* System Test */}
