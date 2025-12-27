@@ -65,6 +65,8 @@ const INITIAL_PATIENT: PatientState = {
   bloodPressure: { systolic: 120, diastolic: 80, history: [] },
   oxygenLevel: { value: 98, unit: "%", label: "SpO2", trend: "stable", lastUpdated: "Now", history: [] },
   temperature: { value: 98.6, unit: "°F", label: "Temperature", trend: "stable", lastUpdated: "Now", history: [] },
+  // ✅ ADDED: Initial Blood Sugar State
+  bloodSugar: { value: 95, unit: "mg/dL", label: "Blood Sugar", trend: "stable", lastUpdated: "Now", history: [] },
   steps: { value: 0, unit: "steps", label: "Steps", trend: "up", lastUpdated: "Now", history: [] },
   dailyStepGoal: 6000,
   stepPoints: 0,
@@ -327,7 +329,7 @@ function App() {
     return () => clearInterval(complianceInterval);
   }, [isAuthenticated]);
 
-// Vitals Simulation Loop
+  // Vitals Simulation Loop
   useEffect(() => {
     if (!isAuthenticated) return;
     if (location.pathname === '/settings') return; 
@@ -340,6 +342,10 @@ function App() {
         const newHr = isCritical ? 130 + Math.random() * 40 : 72 + (Math.random() * 4 - 2);
         const newSys = isCritical ? 160 + Math.random() * 20 : 118 + (Math.random() * 6 - 3);
         const newTemp = 98.6 + (Math.random() * 0.8 - 0.4);
+        
+        // ✅ ADDED: Blood Sugar Simulation
+        const newSugar = isCritical ? 180 + Math.random() * 60 : 95 + (Math.random() * 10 - 5);
+        
         const stepInc = Math.random() > 0.6 ? Math.floor(Math.random() * 8) + 2 : 0;
         
         let newPoints = prev.stepPoints;
@@ -355,20 +361,23 @@ function App() {
           heartRate: { 
             ...prev.heartRate, 
             value: Math.floor(newHr), 
-            // ✅ FIX 1: Add to history, THEN slice the last 20 items
             history: [...prev.heartRate.history, { time: timestamp, value: newHr }].slice(-20) 
           },
           bloodPressure: { 
             ...prev.bloodPressure, 
             systolic: Math.floor(newSys), 
-            // ✅ FIX 2: Same fix for BP
             history: [...prev.bloodPressure.history, { time: timestamp, systolic: newSys, diastolic: prev.bloodPressure.diastolic }].slice(-20) 
           },
           temperature: { 
             ...prev.temperature, 
             value: newTemp, 
-            // ✅ FIX 3: Same fix for Temp
             history: [...prev.temperature.history, { time: timestamp, value: newTemp }].slice(-20) 
+          },
+          // ✅ ADDED: Blood Sugar Logic
+          bloodSugar: {
+            ...prev.bloodSugar,
+            value: newSugar,
+            history: [...(prev.bloodSugar?.history || []), { time: timestamp, value: newSugar }].slice(-20)
           },
           steps: { ...prev.steps, value: prev.steps.value + stepInc },
           stepPoints: newPoints,

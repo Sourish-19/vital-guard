@@ -1,6 +1,5 @@
-
 import React from 'react';
-import { Moon, Clock, Zap, Brain, Activity, TrendingUp, Info, Calendar } from 'lucide-react';
+import { Moon, Clock, Zap, Brain, Activity, TrendingUp, Calendar } from 'lucide-react'; // Removed 'Info'
 import { PatientState } from '../types';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts';
 
@@ -10,7 +9,7 @@ interface SleepTrackerProps {
 
 // Mock Hypnogram Data (Simulating sleep cycles)
 const HYPNOGRAM_DATA = [
-  { time: '22:00', stage: 3, label: 'Awake' }, // 3=Awake, 2=REM, 1=Light, 0=Deep
+  { time: '22:00', stage: 3, label: 'Awake' }, 
   { time: '22:30', stage: 1, label: 'Light' },
   { time: '23:00', stage: 0, label: 'Deep' },
   { time: '23:30', stage: 0, label: 'Deep' },
@@ -29,8 +28,24 @@ const HYPNOGRAM_DATA = [
   { time: '06:00', stage: 3, label: 'Awake' },
 ];
 
+// ✅ ADDED: Fallback data so the chart is never empty
+const MOCK_WEEKLY_HISTORY = [
+  { day: 'Sun', hours: 6.5 },
+  { day: 'Mon', hours: 7.2 },
+  { day: 'Tue', hours: 5.8 },
+  { day: 'Wed', hours: 7.5 },
+  { day: 'Thu', hours: 8.1 },
+  { day: 'Fri', hours: 6.9 },
+  { day: 'Sat', hours: 9.2 },
+];
+
 const SleepTracker: React.FC<SleepTrackerProps> = ({ patient }) => {
   const { sleep } = patient;
+
+  // ✅ LOGIC: Use real history if available, otherwise use mock data
+  const chartData = (sleep.history && sleep.history.length > 0) 
+    ? sleep.history 
+    : MOCK_WEEKLY_HISTORY;
 
   const getScoreColor = (score: number) => {
     if (score >= 80) return 'text-emerald-400';
@@ -71,10 +86,10 @@ const SleepTracker: React.FC<SleepTrackerProps> = ({ patient }) => {
         </div>
       </div>
 
-      <div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
         {/* HERO: Sleep Score */}
-        <div className="bg-gradient-to-br from-[#1e1b4b] to-[#312e81] rounded-[2.5rem] p-8 text-white shadow-2xl relative overflow-hidden flex flex-col md:flex-row items-center justify-between min-h-[300px]">
+        <div className="lg:col-span-2 bg-gradient-to-br from-[#1e1b4b] to-[#312e81] rounded-[2.5rem] p-8 text-white shadow-2xl relative overflow-hidden flex flex-col md:flex-row items-center justify-between min-h-[300px]">
            {/* Stars Background */}
            <div className="absolute inset-0 opacity-30">
               <div className="absolute top-10 left-10 w-1 h-1 bg-white rounded-full animate-pulse"></div>
@@ -129,21 +144,22 @@ const SleepTracker: React.FC<SleepTrackerProps> = ({ patient }) => {
         </div>
 
         {/* Weekly Trend */}
-        {/* <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col">
+        <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col">
            <h3 className="font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
               <Calendar size={20} className="text-indigo-500" />
               Weekly History
            </h3>
            <div className="flex-1 min-h-[200px]">
               <ResponsiveContainer width="100%" height="100%">
-                 <BarChart data={sleep.history}>
+                 {/* ✅ UPDATED: Now uses 'chartData' instead of potentially empty 'sleep.history' */}
+                 <BarChart data={chartData}>
                     <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
                     <Tooltip 
                        cursor={{fill: 'transparent'}}
                        contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', backgroundColor: '#1e293b', color: '#fff'}}
                     />
                     <Bar dataKey="hours" radius={[6, 6, 6, 6]} barSize={20}>
-                       {sleep.history.map((entry, index) => (
+                       {chartData.map((entry: any, index: number) => (
                           <Cell key={`cell-${index}`} fill={entry.hours >= 7 ? '#6366f1' : '#cbd5e1'} />
                        ))}
                     </Bar>
@@ -154,7 +170,7 @@ const SleepTracker: React.FC<SleepTrackerProps> = ({ patient }) => {
               <span className="text-slate-500 dark:text-slate-400">Avg. Duration</span>
               <span className="font-bold text-slate-900 dark:text-white">7h 05m</span>
            </div>
-        </div> */}
+        </div>
       </div>
 
       {/* Sleep Stages Breakdown */}

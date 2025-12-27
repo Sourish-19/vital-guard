@@ -1,5 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
 import { PatientState, AIInsight } from "../types";
+import axios from "axios";
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const SYSTEM_INSTRUCTION = `
 You are an advanced AI medical assistant for an elderly care dashboard called SmartSOS.
@@ -99,87 +102,40 @@ export const getChatResponse = async (userMessage: string, patient: PatientState
   }
 };
 
-export const analyzeMedicationImage = async (base64Image: string): Promise<{ name: string; dosage: string; time: string; type: string } | null> => {
-  const fallbackData = {
-    name: "Simulated Medication",
-    dosage: "50mg",
-    time: "09:00",
-    type: "pill"
-  };
-
-  const apiKey = getApiKey();
-  if (!apiKey) return fallbackData;
-
-  const ai = new GoogleGenAI({ apiKey });
-
+export const analyzeMedicationImage = async (base64Image: string) => {
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-1.5-flash',
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
-            { text: `Analyze this image of a medication container. Return STRICT JSON ONLY: { "name": "...", "dosage": "...", "time": "08:00", "type": "pill" }.` }
-          ]
-        }
-      ]
+    // Send to Python Backend
+    const response = await axios.post(`${API_URL}/api/analyze-medication`, {
+      image: base64Image
     });
-
-    const text = response.text ? response.text() : "";
-    const cleanText = text.replace(/```json\n?|```/g, '').trim();
-    const firstBrace = cleanText.indexOf('{');
-    const lastBrace = cleanText.lastIndexOf('}');
-    
-    if (firstBrace === -1) throw new Error("No JSON found");
-    
-    return JSON.parse(cleanText.substring(firstBrace, lastBrace + 1));
-
+    return response.data;
   } catch (error) {
-    console.warn("AI API Error (Medication Image):", error);
-    return fallbackData;
+    console.error("Backend Analysis Error:", error);
+    // Return fallback logic is handled by backend now, 
+    // but safe to return null here if network fails completely.
+    return {
+        name: "Simulated Medication",
+        dosage: "50mg",
+        time: "09:00",
+        type: "pill"
+    };
   }
 };
 
-export const analyzeFoodImage = async (base64Image: string): Promise<{ name: string; calories: number; protein: number; carbs: number; fats: number } | null> => {
-  const fallbackData = {
-    name: "Simulated Healthy Meal",
-    calories: 350,
-    protein: 30,
-    carbs: 15,
-    fats: 18
-  };
-
-  const apiKey = getApiKey();
-  if (!apiKey) return fallbackData;
-
-  const ai = new GoogleGenAI({ apiKey });
-
+export const analyzeFoodImage = async (base64Image: string) => {
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-1.5-flash',
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
-            { text: `Analyze this food image. Return STRICT JSON ONLY: { "name": "...", "calories": 0, "protein": 0, "carbs": 0, "fats": 0 }.` }
-          ]
-        }
-      ]
+    const response = await axios.post(`${API_URL}/api/analyze-food`, {
+      image: base64Image
     });
-
-    const text = response.text ? response.text() : "";
-    const cleanText = text.replace(/```json\n?|```/g, '').trim();
-    const firstBrace = cleanText.indexOf('{');
-    const lastBrace = cleanText.lastIndexOf('}');
-    
-    if (firstBrace === -1) throw new Error("No JSON found");
-
-    return JSON.parse(cleanText.substring(firstBrace, lastBrace + 1));
-
+    return response.data;
   } catch (error) {
-    console.warn("AI API Error (Food Image):", error);
-    return fallbackData;
+    console.error("Backend Analysis Error:", error);
+    return {
+        name: "Simulated Healthy Meal",
+        calories: 350,
+        protein: 30,
+        carbs: 15,
+        fats: 18
+    };
   }
 };

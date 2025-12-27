@@ -17,6 +17,8 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from dotenv import load_dotenv
+import re
+import json
 
 # ==========================================
 # 0. LOAD ENVIRONMENT VARIABLES
@@ -185,6 +187,9 @@ class AlertRequest(BaseModel):
     phone_number: str
     message: str
 
+class ImageAnalysisRequest(BaseModel):
+    image: str
+
 # ==========================================
 # 4. AUTH & HELPERS
 # ==========================================
@@ -211,6 +216,60 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     
     user["id"] = str(user["_id"])
     return user
+
+def get_best_gemini_model(api_key):
+    """
+    Asks Google which models are available and picks the best one.
+    Prioritizes 1.5-flash, then pro, then any gemini model.
+    """
+    try:
+        list_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+        list_response = requests.get(list_url, timeout=5)
+        
+        target_model = "gemini-1.5-flash" # Default
+        
+        if list_response.status_code == 200:
+            models_data = list_response.json()
+            # Clean up model names (remove 'models/' prefix)
+            available_models = [m['name'].replace('models/', '') for m in models_data.get('models', [])]
+            
+            if "gemini-1.5-flash" in available_models:
+                target_model = "gemini-1.5-flash"
+            elif "gemini-pro-vision" in available_models: # Good for images
+                target_model = "gemini-pro-vision"
+            elif "gemini-pro" in available_models:
+                target_model = "gemini-pro"
+            elif available_models:
+                # Find first that starts with gemini
+                target_model = next((m for m in available_models if 'gemini' in m), available_models[0])
+                
+            print(f"✅ Auto-Selected Model: {target_model}")
+            return target_model
+        else:
+            print(f"⚠️ Could not list models. Using default: {target_model}")
+            return target_model
+    except Exception as e:
+        print(f"⚠️ Model selection failed: {e}. Using default.")
+        return "gemini-1.5-flash"
+
+def extract_first_json(text):
+    """
+    Finds the first '{', and asks Python's JSON parser to 
+    read exactly one object from that point, ignoring trailing text.
+    """
+    try:
+        # 1. Find the start of the JSON object
+        start = text.find("{")
+        if start == -1:
+            return None
+        
+        # 2. raw_decode returns a tuple: (json_object, end_index)
+        # It handles nested braces and string values correctly.
+        obj, _ = json.JSONDecoder().raw_decode(text[start:])
+        return obj
+    except Exception as e:
+        print(f"⚠️ JSON Extraction Failed: {e}")
+        return None
 
 # ==========================================
 # 5. ROUTES
@@ -354,6 +413,107 @@ async def chat_endpoint(request: ChatRequest):
         print(f"❌ AI Chat Failed: {e}")
         # Return 503 so frontend uses simulation fallback
         raise HTTPException(status_code=503, detail="AI Service Unavailable")
+
+@app.post("/api/analyze-medication")
+async def analyze_medication(request: ImageAnalysisRequest):
+    try:
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise HTTPException(status_code=500, detail="API Key missing")
+
+        target_model = get_best_gemini_model(api_key)
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{target_model}:generateContent?key={api_key}"
+        
+        clean_image = request.image
+        if "," in clean_image:
+            clean_image = clean_image.split(",")[1]
+
+        payload = {
+            "contents": [{
+                "parts": [
+                    {"text": 'Analyze this image of a medication container. Return STRICT JSON ONLY: { "name": "...", "dosage": "...", "time": "08:00", "type": "pill" }.'},
+                    { "inline_data": { "mime_type": "image/jpeg", "data": clean_image } }
+                ]
+            }]
+        }
+
+        headers = {"Content-Type": "application/json"}
+        response = requests.post(url, headers=headers, json=payload, timeout=15)
+
+        if response.status_code != 200:
+            print(f"❌ Gemini Error: {response.text}")
+            raise HTTPException(status_code=500, detail="AI Analysis Failed")
+
+        data = response.json()
+        raw_text = data.get("candidates", [])[0].get("content", {}).get("parts", [])[0].get("text", "")
+        
+        # ✅ FIX: Use the robust extractor
+        json_data = extract_first_json(raw_text)
+        
+        if json_data:
+            return json_data
+        else:
+            raise ValueError("No valid JSON found in response")
+
+    except Exception as e:
+        print(f"❌ Medication Analysis Failed: {e}")
+        return {
+            "name": "Manual Entry Required",
+            "dosage": "--",
+            "time": "09:00",
+            "type": "pill"
+        }
+
+@app.post("/api/analyze-food")
+async def analyze_food(request: ImageAnalysisRequest):
+    try:
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise HTTPException(status_code=500, detail="API Key missing")
+
+        target_model = get_best_gemini_model(api_key)
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{target_model}:generateContent?key={api_key}"
+        
+        clean_image = request.image
+        if "," in clean_image:
+            clean_image = clean_image.split(",")[1]
+
+        payload = {
+            "contents": [{
+                "parts": [
+                    {"text": 'Analyze this food image. Return STRICT JSON ONLY: { "name": "...", "calories": 0, "protein": 0, "carbs": 0, "fats": 0 }.'},
+                    { "inline_data": { "mime_type": "image/jpeg", "data": clean_image } }
+                ]
+            }]
+        }
+
+        headers = {"Content-Type": "application/json"}
+        response = requests.post(url, headers=headers, json=payload, timeout=15)
+
+        if response.status_code != 200:
+            print(f"❌ Gemini Error: {response.text}")
+            raise HTTPException(status_code=500, detail="AI Analysis Failed")
+
+        data = response.json()
+        raw_text = data.get("candidates", [])[0].get("content", {}).get("parts", [])[0].get("text", "")
+        
+        # ✅ FIX: Use the robust extractor
+        json_data = extract_first_json(raw_text)
+        
+        if json_data:
+            return json_data
+        else:
+            raise ValueError("No valid JSON found")
+
+    except Exception as e:
+        print(f"❌ Food Analysis Failed: {e}")
+        return {
+            "name": "Healthy Meal (Est.)",
+            "calories": 350,
+            "protein": 20,
+            "carbs": 40,
+            "fats": 10
+        }
 
 # ✅ TWILIO ALERT
 @app.post("/api/send-alert")

@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Heart, Activity, Thermometer, Wind, MapPin, PlayCircle, CheckCircle, AlertCircle, Sparkles, Footprints, Moon, Utensils, ArrowRight } from 'lucide-react';
+import { Heart, Activity, Thermometer, Wind, MapPin, PlayCircle, CheckCircle, AlertCircle, Sparkles, Footprints, Moon, Utensils, ArrowRight, Droplet } from 'lucide-react';
 import { PatientState, AlertLevel, AIInsight, PageView } from '../types';
 
 interface DashboardProps {
@@ -18,7 +18,7 @@ const Dashboard: React.FC<DashboardProps> = ({ patient, onSpeak, onSimulateChaos
   const isWarning = patient.status === AlertLevel.WARNING;
 
   const StatusCard = ({ label, value, unit, icon: Icon, color, trend, subtext }: any) => (
-    <div className={`bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm relative overflow-hidden group hover:shadow-md transition-all h-full flex flex-col justify-between`}>
+    <div className={`w-[270px] shrink-0 bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm relative overflow-hidden group hover:shadow-md transition-all h-full flex flex-col justify-between`}>
       <div className={`absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity ${color}`}>
         <Icon size={64} />
       </div>
@@ -110,7 +110,7 @@ const Dashboard: React.FC<DashboardProps> = ({ patient, onSpeak, onSimulateChaos
       {/* 2. Live Vitals Grid */}
       <div>
          <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-4 ml-1">Live Vitals</h2>
-         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
+         <div className="flex overflow-x-auto space-x-5 pb-2">
             <StatusCard 
               label="Heart Rate" 
               value={patient.heartRate.value} 
@@ -142,6 +142,14 @@ const Dashboard: React.FC<DashboardProps> = ({ patient, onSpeak, onSimulateChaos
               icon={Thermometer} 
               color="bg-amber-500"
               subtext="Normal: 97-99°F"
+            />
+            <StatusCard 
+              label="Blood Glucose" 
+              value={Math.round(patient.bloodSugar.value)} 
+              unit="mg/dL" 
+              icon={Droplet} 
+              color="bg-pink-500"
+              subtext="Fasting: 70-100"
             />
          </div>
       </div>
