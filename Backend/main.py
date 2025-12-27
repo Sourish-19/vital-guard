@@ -48,7 +48,7 @@ SOS_LOGS = []
 # ==========================================
 app = FastAPI(title="VitalGuard API")
 
-origins = ["http://localhost:5173", "http://localhost:3000", "https://vitalgaurd-mmeu.vercel.app"]
+origins = ["http://localhost:5173", "http://localhost:3000", "https://vital-guard.vercel.app"]
 
 app.add_middleware(
     CORSMiddleware,
